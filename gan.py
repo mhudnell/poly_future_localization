@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib.pyplot as plt
 
 from keras import applications
 from keras import backend as K
@@ -7,6 +8,8 @@ from keras import models
 from keras import optimizers
 import tensorflow as tf
 import os
+
+from vis_tool import drawObjectRects
 
 '''
 Returns x and y (past and future) for batch_size # of samples
@@ -144,9 +147,9 @@ def training_steps_GAN(model_components):
             g_z = generator_model.predict(x)
             
             # TRAIN ON REAL (y = 1) w/ noise
-            d_l_r = discriminator_model.train_on_batch(y, np.random.uniform(low=0.999, high=1.0, size=batch_size)) # 0.7, 1.2 # GANs need noise to prevent loss going to zero
+            d_l_r = discriminator_model.train_on_batch(y, np.random.uniform(low=0.7, high=1.2, size=batch_size))      # 0.7, 1.2 # GANs need noise to prevent loss going to zero # 0.999, 1.0
             # TRAIN ON GENERATED (y = 0) w/ noise
-            d_l_g = discriminator_model.train_on_batch(g_z, np.random.uniform(low=0.0, high=0.001, size=batch_size)) # 0.0, 0.3 # GANs need noise to prevent loss going to zero
+            d_l_g = discriminator_model.train_on_batch(g_z, np.random.uniform(low=0.0, high=0.3, size=batch_size))    # 0.0, 0.3 # GANs need noise to prevent loss going to zero # 0.0, 0.001
 
         disc_loss_real.append(d_l_r)
         disc_loss_generated.append(d_l_g)
@@ -157,7 +160,7 @@ def training_steps_GAN(model_components):
             x, y = get_data_batch(data_x, data_y, batch_size, seed=i+j)
             
             # TRAIN (y = 1) bc want pos feedback for tricking discrim
-            loss = combined_model.train_on_batch(x, np.random.uniform(low=0.999, high=1.0, size=batch_size))    # 0.7, 1.2 # GANs need noise to prevent loss going to zero
+            loss = combined_model.train_on_batch(x, np.random.uniform(low=0.7, high=1.2, size=batch_size))    # 0.7, 1.2 # GANs need noise to prevent loss going to zero # 0.999, 1.0
         combined_loss.append(loss)
 
         # SAVE WEIGHTS / PLOT IMAGES
@@ -178,20 +181,22 @@ def training_steps_GAN(model_components):
             #                 save=False, prefix= data_dir + cache_prefix + '_' + str(i) )
             
             # SAVE MODEL CHECKPOINTS
-            model_checkpoint_base_name = data_dir + cache_prefix + '_{}_model_weights_step_{}.h5'
-            generator_model.save_weights(model_checkpoint_base_name.format('generator', i))
-            discriminator_model.save_weights(model_checkpoint_base_name.format('discriminator', i))
+            model_checkpoint_base_name = data_dir + cache_prefix + '_{}_weights_step_{}.h5'
+            generator_model.save_weights(model_checkpoint_base_name.format('gen', i))
+            discriminator_model.save_weights(model_checkpoint_base_name.format('discrim', i))
             # pickle.dump([combined_loss, disc_loss_generated, disc_loss_real, xgb_losses], 
             #     open( data_dir + cache_prefix + '_losses_step_{}.pkl'.format(i) ,'wb'))
 
-    # test_x, test_y = get_data_batch(data_x, data_y, 1, seed=0)
-    test_x = data_x[0]
-    test_y = data_y[0]
-    test_x = np.reshape(test_x, (1, -1) )
-    test_g_z = generator_model.predict(test_x)
+            # PRINT GENERATED EXAMPLE
+            # test_x = data_x[0]
+            # test_x = np.reshape(test_x, (1, -1) )
+            # test_g_z = generator_model.predict(test_x)
+            # print(np.reshape(test_g_z, (1,25,4)))
 
-    print(test_y)
-    print(test_g_z)
+    # test_x, test_y = get_data_batch(data_x, data_y, 1, seed=0)
+    # test_y = data_y[0]
+
+    # print(test_y)
     
     return [combined_loss, disc_loss_generated, disc_loss_real, xgb_losses]
 
@@ -208,12 +213,12 @@ def getModel(data_cols, generator_model_path = None, discriminator_model_path = 
     generator_model, discriminator_model, combined_model = define_models_GAN(past_dim, pred_dim, base_n_count)
     
     # COMPILE MODELS
-    learning_rate = 5e-4 # 5e-5
+    learning_rate = 5e-4 # 5e-4, 5e-5
     adam = optimizers.Adam(lr=learning_rate, beta_1=0.5, beta_2=0.9)
 
     generator_model.compile(optimizer=adam, loss='binary_crossentropy')
     discriminator_model.compile(optimizer=adam, loss='binary_crossentropy')
-    discriminator_model.trainable = False
+    discriminator_model.trainable = False   # freeze discriminator weights (we want to improve model by improving generator, rather than making the discriminator worse)
     combined_model.compile(optimizer=adam, loss='binary_crossentropy')
     
     if show:
@@ -234,7 +239,29 @@ def getModel(data_cols, generator_model_path = None, discriminator_model_path = 
 
     return generator_model, discriminator_model, combined_model
 
+def testModel(generator_model, discriminator_model, combined_model):
+    data_x, data_y, files_x, files_y = get_data()
 
+    test_x = data_x[0]
+    test_y = data_y[0]
+    test_x = np.reshape(test_x, (1, -1))
+    test_g_z = generator_model.predict(test_x)
+    test_g_z = np.reshape(test_g_z, (25,4))
+
+    realfile = open('bb images\\real.txt', 'w')
+    genfile = open('bb images\\gen.txt', 'w')
+    for item in test_y:
+        realfile.write("%s\n" % item)
+    for item in test_g_z:
+        genfile.write("%s\n" % item)
+
+    frames = ['000010.png', '000011.png', '000012.png', '000013.png', '000014.png']
+    for i in range(5):
+        bb_i = i * 5
+        drawObjectRects(frames[i], test_g_z[bb_i:bb_i+5], isGen=True)
+        drawObjectRects(frames[i], test_y[bb_i:bb_i+5], isGen=False)
+
+    return
 
 data_cols = []
 for frame in range(1,6):        # currently produces the wrong order
@@ -242,27 +269,50 @@ for frame in range(1,6):        # currently produces the wrong order
         for obj in range(1,6):
             data_cols.append('f' + str(frame) + char + str(obj))
 
-generator_model, discriminator_model, combined_model = getModel(data_cols)
+# CREATE NEW MODEL
+# generator_model, discriminator_model, combined_model = getModel(data_cols)
 
-# DEFINE TRAINING PARAMS
-label_cols = []
-label_dim = 0
-nb_steps = 500 + 1 # 50000 # Add one for logging of the last interval
-batch_size = 128 # 64
-k_d = 1  # number of discriminator network updates per adversarial training step
-k_g = 1  # number of generator network updates per adversarial training step
-log_interval = 50 # 100  # interval (in steps) at which to log loss summaries and save plots of image samples to disc
-data_dir = 'C:\\Users\\Max\\Research\\maxGAN\\weights\\'
-starting_step = 0
-cache_prefix = 'GAN'
-show = True
-combined_loss, disc_loss_generated, disc_loss_real, xgb_losses = [], [], [], []
+# # DEFINE TRAINING PARAMS
+# label_cols = []
+# label_dim = 0
+# nb_steps = 500 + 1 # 50000 # Add one for logging of the last interval
+# batch_size = 128 # 64
+# k_d = 1  # number of discriminator network updates per adversarial training step
+# k_g = 1  # number of generator network updates per adversarial training step
+# log_interval = 50 # 100  # interval (in steps) at which to log loss summaries and save plots of image samples to disc
+# data_dir = 'C:\\Users\\Max\\Research\\maxGAN\\weights\\'
+# starting_step = 0
+# cache_prefix = 'GAN_noise_5e-4_'
+# show = True
+# combined_loss, disc_loss_generated, disc_loss_real, xgb_losses = [], [], [], []
 
-model_components = [ cache_prefix, starting_step,
-                    data_cols, label_cols, label_dim,
-                    generator_model, discriminator_model, combined_model,
-                    nb_steps, batch_size, k_d, k_g,
-                    log_interval, data_dir, show,
-                    combined_loss, disc_loss_generated, disc_loss_real, xgb_losses ]
+# model_components = [ cache_prefix, starting_step,
+#                     data_cols, label_cols, label_dim,
+#                     generator_model, discriminator_model, combined_model,
+#                     nb_steps, batch_size, k_d, k_g,
+#                     log_interval, data_dir, show,
+#                     combined_loss, disc_loss_generated, disc_loss_real, xgb_losses ]
     
-[combined_loss, disc_loss_generated, disc_loss_real, xgb_losses] = training_steps_GAN(model_components)
+# [combined_loss, disc_loss_generated, disc_loss_real, xgb_losses] = training_steps_GAN(model_components)
+
+# # PLOT LOSS
+# x = np.arange(nb_steps)
+# fig = plt.figure(figsize=(11,8))
+# ax1 = fig.add_subplot(111)
+
+# ax1.plot(x, combined_loss, label='generator loss')
+# ax1.plot(x, disc_loss_generated, label='discrim loss gen')
+# ax1.plot(x, disc_loss_real, label='discrim loss real')
+# ax1.legend(loc=1)
+# fig.suptitle(cache_prefix, fontsize=20)
+# plt.xlabel('number of steps', fontsize=18)
+# plt.ylabel('loss', fontsize=16)
+
+# plt.savefig('loss plots\\' + cache_prefix + '_loss_plot.png')
+
+## TESTING ##
+# LOAD MODEL
+generator_model, discriminator_model, combined_model = getModel(data_cols, generator_model_path = 'C:\\Users\\Max\\Research\\maxGAN\\weights\\GAN_noise_4e-4__gen_weights_step_100.h5',
+                                                                     discriminator_model_path = 'C:\\Users\\Max\\Research\\maxGAN\\weights\\GAN_noise_4e-4__discrim_weights_step_100.h5')
+
+testModel(generator_model, discriminator_model, combined_model)

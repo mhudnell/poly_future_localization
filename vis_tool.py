@@ -20,7 +20,10 @@ def drawObjectRects(frame, bb, isGen):
 		rects[i][3] = int(float(nums[3]))
 
 	for i in range(5):
-		img = cv2.rectangle(img, (rects[i][0], rects[i][1]), (rects[i][2], rects[i][3]), (0,255,0), 5)
+		if rects[i][0] <= rects[i][2] and rects[i][1] <= rects[i][3]:
+			img = cv2.rectangle(img, (rects[i][0], rects[i][1]), (rects[i][2], rects[i][3]), (0,255,0), 5)
+		else:	# model has ltrb wrong
+			img = cv2.rectangle(img, (rects[i][0], rects[i][1]), (rects[i][2], rects[i][3]), (255,0,0), 5)
 
 	prefix = "gen" if isGen else "real"
 	cv2.imwrite("C:\\Users\\Max\\Research\\maxGAN\\bb images\\" + prefix + frame, img );

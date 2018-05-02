@@ -1,31 +1,28 @@
 
-import gan
+import gan_1obj
 import numpy as np
 import matplotlib.pyplot as plt
 
-data_cols = []
-for frame in range(1,6):        # currently produces the wrong order
-    for char in ['L', 'T', 'R', 'B']:
-        for obj in range(1,6):
-            data_cols.append('f' + str(frame) + char + str(obj))
+data_cols = ['L', 'T', 'R', 'B']
+
 
 ## TRAINING ##
 # CREATE NEW MODEL
-lr = .0005 # .0005 # 5e-4, 5e-5
-generator_model, discriminator_model, combined_model = gan.getModel(data_cols, lr=lr)
+lr = .002 # .0005 # 5e-4, 5e-5
+generator_model, discriminator_model, combined_model = gan_1obj.getModel(data_cols, lr=lr)
 
 # DEFINE TRAINING PARAMS
 label_cols = []
 label_dim = 0
-log_interval = 240 # ~1 epoch (7700 / 32 =~ 240) # 50, 100  # interval (in steps) at which to log loss summaries and save plots of image samples to disc
-epochs = 30
+log_interval = 274 # ~1 epoch (35082 / 32 =~ 1096) # 50, 100  # interval (in steps) at which to log loss summaries and save plots of image samples to disc
+epochs = 10
 nb_steps = log_interval*epochs # 50000 # Add one for logging of the last interval
-batch_size = 32 # 128, 64
-k_d = 2  # 1 number of discriminator network updates per adversarial training step
+batch_size = 128 # 128, 64
+k_d = 3  # 1 number of discriminator network updates per adversarial training step
 k_g = 1  # 1 number of generator network updates per adversarial training step
 
 starting_step = 0
-cache_prefix = 'maxGAN_bs{}_lr{}_kd{}_kg{}_steps{}_DualLRexpDecay5_256node'.format(batch_size, lr, k_d, k_g, nb_steps)
+cache_prefix = 'maxGAN1obj_bs{}_lr{}_kd{}_kg{}_steps{}_expDecay5'.format(batch_size, lr, k_d, k_g, nb_steps)
 # cache_prefix = 'maxGAN_bs{}_lr{}_kd{}_kg{}'.format(batch_size, lr, k_d, k_g)
 data_dir = 'C:\\Users\\Max\\Research\\maxGAN\\weights\\'+cache_prefix+'\\'
 show = True
@@ -36,7 +33,7 @@ model_components = [ cache_prefix, starting_step,
                     nb_steps, batch_size, k_d, k_g,
                     log_interval, data_dir, show]
     
-[combined_loss, disc_loss_generated, disc_loss_real, disc_loss, avg_gen_pred, avg_real_pred] = gan.training_steps_GAN(model_components)
+[combined_loss, disc_loss_generated, disc_loss_real, disc_loss, avg_gen_pred, avg_real_pred] = gan_1obj.training_steps_GAN(model_components)
 
 # PLOT LOSS
 x = np.arange(nb_steps)

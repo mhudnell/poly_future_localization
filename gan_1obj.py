@@ -44,17 +44,17 @@ def get_data_batch(data_x, data_y, batch_size, seed=0):
 TODO: make sure future_all[i] corresponds to the 'future' positions of past_all[i]
 '''
 def get_data():
-    past_all = np.empty([7714, 50, 4])
+    past_all = np.empty([35082, 10, 4])
     past_files = []
 
     file_num1 = 0
-    for path, subdirs, files in os.walk('F:\\Car data\\label_02_extracted\\past'):
+    for path, subdirs, files in os.walk('F:\\Car data\\label_02_extracted\\past_1obj'):
         for name in files:
             fpath = os.path.join(path, name)
             past_files.append(fpath)
             f = open(fpath,'r')
-            past_one = np.empty([50, 4])
-            for i in range(50):
+            past_one = np.empty([10, 4])
+            for i in range(10):
                 line = f.readline()
                 if not line:
                     break
@@ -63,17 +63,17 @@ def get_data():
             past_all[file_num1] = past_one
             file_num1 += 1
 
-    future_all = np.empty([7714, 25, 4])
+    future_all = np.empty([35082, 1, 4])
     future_files = []
 
     file_num2 = 0
-    for path, subdirs, files in os.walk('F:\\Car data\\label_02_extracted\\future'):
+    for path, subdirs, files in os.walk('F:\\Car data\\label_02_extracted\\future_1obj'):
         for name in files:
             fpath = os.path.join(path, name)
             future_files.append(fpath)
             f = open(fpath,'r')
-            future_one = np.empty([25, 4])
-            for i in range(25):
+            future_one = np.empty([1, 4])
+            for i in range(1):
                 line = f.readline()
                 if not line:
                     break
@@ -223,7 +223,7 @@ def training_steps_GAN(model_components):
             lossFile.write('Step: {} of {}.\n'.format(i, starting_step + nb_steps))
             K.set_learning_phase(0) # 0 = test
 
-            # half learning rate every 10 epochs
+            # half learning rate every 5 epochs
             if not i % (log_interval*5): # UPDATE LEARNING RATE
                 # They all share an optimizer, so this decreases the lr for all models
                 K.set_value(generator_model.optimizer.lr, K.get_value(generator_model.optimizer.lr) / 2)
@@ -266,8 +266,8 @@ def training_steps_GAN(model_components):
     return [combined_loss, disc_loss_generated, disc_loss_real, disc_loss, avg_gen_pred, avg_real_pred]
 
 def getModel(data_cols, generator_model_path = None, discriminator_model_path = None, loss_pickle_path = None, seed=0, lr=5e-4):
-    past_dim = 200 # 32 # needs to be ~pred_dim
-    base_n_count = 512 # 128
+    past_dim = 40 # 32 # needs to be ~pred_dim
+    base_n_count = 128 # 128
     show = True
 
     np.random.seed(seed)     # set random seed
@@ -320,12 +320,14 @@ def testModel(generator_model, discriminator_model, combined_model, cache_prefix
 
     test_x_pretty = data_x[0]
     test_y_pretty = data_y[0]
+    
     test_x = np.reshape(test_x_pretty, (1, -1))
     test_y = np.reshape(test_y_pretty, (1, -1))
+
     # test_z = np.random.normal(size=(1, 200, ))    # SAMPLE FROM NOISE
 
     test_g_z = generator_model.predict(test_x)
-    test_g_z_pretty = np.reshape(test_g_z, (25,4))
+    test_g_z_pretty = np.reshape(test_g_z, (1,4))
 
     dpred_real = discriminator_model.predict(test_y)
     dpred_gen = discriminator_model.predict(test_g_z)
@@ -358,11 +360,11 @@ def testModel(generator_model, discriminator_model, combined_model, cache_prefix
         genfile.write("%s\n" % item)
 
     # DRAW RESULTS
-    frames = ['000010.png', '000011.png', '000012.png', '000013.png', '000014.png']
-    for i in range(5):
-        bb_i = i * 5
-        drawFrameRects('0000', frames[i], test_g_z_pretty[bb_i:bb_i+5], isGen=True, folder_dir=data_dir)
-        drawFrameRects('0000', frames[i], test_y_pretty[bb_i:bb_i+5], isGen=False, folder_dir=data_dir)
+    frames = ['000014.png']
+    print("test_g_z_pretty: ",test_g_z_pretty)
+    print("test_y_pretty: ",test_y_pretty)
+    drawFrameRects('0000', frames[0], test_g_z_pretty, isGen=True, folder_dir=data_dir)
+    drawFrameRects('0000', frames[0], test_y_pretty, isGen=False, folder_dir=data_dir)
 
     return
 
@@ -434,7 +436,7 @@ def testModelMult(generator_model, discriminator_model, combined_model, cache_pr
 
 def testDiscrim(generator_model, discriminator_model, combined_model):
     data_x, data_y, files_x, files_y = get_data()
-    data_x, data_y = get_data_batch(data_x, data_y, 557, seed=7)
+    data_x, data_y = get_data_batch(data_x, data_y, 590, seed=7)
     gen_correct = 0
     gen_incorrect = 0
     gen_unsure = 0
@@ -453,7 +455,7 @@ def testDiscrim(generator_model, discriminator_model, combined_model):
         test_y = np.reshape(test_y_pretty, (1, -1))
         # test_z = np.random.normal(size=(1, 200, ))    # SAMPLE FROM NOISE
         test_g_z = generator_model.predict(test_x)
-        test_g_z_pretty = np.reshape(test_g_z, (25,4))
+        test_g_z_pretty = np.reshape(test_g_z, (1,4))
 
         dpred_real = discriminator_model.predict(test_y)
         dpred_gen = discriminator_model.predict(test_g_z)

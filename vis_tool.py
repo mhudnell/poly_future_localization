@@ -7,7 +7,76 @@ import numpy as np
 
 # cv2.imwrite( "test.png", img );
 
-def drawObjectRects(frame, bb, isGen):
+''' drawFrameRects
+Draws bounding boxes onto specified frame
+params: 
+		sample_set: the set to get the specified frame from.
+		frame: the frame to draw boxes on.
+		bb: a 5x4 array of strings, each row being ltrb vals for a bounding box.
+'''
+def drawFrameRects(sample_set, frame, bb, isGen, folder_dir='C:\\Users\\Max\\Research\\maxGAN\\bb images\\'):
+	img_file = 'F:\\Car data\\kitti\\data_tracking\\training\\image_02\\'+ sample_set +'\\'+ frame
+	img = cv2.imread(img_file)
+
+	# convert bb (ltrb values) to int
+	bb_int = np.zeros((len(bb),4), dtype='int32')
+	for i in range(len(bb_int)):
+		nums = bb[i]
+		bb_int[i][0] = int(float(nums[0]))
+		bb_int[i][1] = int(float(nums[1]))
+		bb_int[i][2] = int(float(nums[2]))
+		bb_int[i][3] = int(float(nums[3]))
+
+	# draw each bounding box on the image
+	for i in range(len(bb_int)):
+		if bb_int[i][0] <= bb_int[i][2] and bb_int[i][1] <= bb_int[i][3]:
+			img = cv2.rectangle(img, (bb_int[i][0], bb_int[i][1]), (bb_int[i][2], bb_int[i][3]), (0,255,0), 5)	# draw in green if ltrb vals are valid
+		else:	# model has ltrb wrong
+			img = cv2.rectangle(img, (bb_int[i][0], bb_int[i][1]), (bb_int[i][2], bb_int[i][3]), (0,0,255), 5)	# draw in red if ltrb vals are invalid
+
+	# output image file to 'bb_images' folder
+	prefix = "gen" if isGen else "real"
+	cv2.imwrite(folder_dir + prefix + frame, img);
+
+	return
+
+''' drawFrameRects_1obj
+Draws bounding boxes onto specified frame
+params: 
+		sample_set: the set to get the specified frame from.
+		frame: the frame to draw boxes on.
+		bb: a 5x4 array of strings, each row being ltrb vals for a bounding box.
+'''
+def drawFrameRects_1obj(sample_set, frame, bb, isGen, folder_dir='C:\\Users\\Max\\Research\\maxGAN\\bb images\\'):
+	img_file = 'F:\\Car data\\kitti\\data_tracking\\training\\image_02\\'+ sample_set +'\\'+ frame
+	img = cv2.imread(img_file)
+
+	# convert bb (ltrb values) to int
+	bb_int = np.zeros((5,4), dtype='int32')
+	for i in range(5):
+		nums = bb[i]
+		bb_int[i][0] = int(float(nums[0]))
+		bb_int[i][1] = int(float(nums[1]))
+		bb_int[i][2] = int(float(nums[2]))
+		bb_int[i][3] = int(float(nums[3]))
+
+	# draw each bounding box on the image
+	for i in range(5):
+		if bb_int[i][0] <= bb_int[i][2] and bb_int[i][1] <= bb_int[i][3]:
+			img = cv2.rectangle(img, (bb_int[i][0], bb_int[i][1]), (bb_int[i][2], bb_int[i][3]), (0,255,0), 5)	# draw in green if ltrb vals are valid
+		else:	# model has ltrb wrong
+			img = cv2.rectangle(img, (bb_int[i][0], bb_int[i][1]), (bb_int[i][2], bb_int[i][3]), (0,0,255), 5)	# draw in red if ltrb vals are invalid
+
+	# output image file to 'bb_images' folder
+	prefix = "gen" if isGen else "real"
+	cv2.imwrite(folder_dir + prefix + frame, img);
+
+	return
+'''
+draws bounding boxes onto multiple specified frames
+	TODO: implement, it is the same as drawFrameRects right now
+'''
+def drawFramesRects(frame, bbs, isGen, folder_dir='C:\\Users\\Max\\Research\\maxGAN\\bb images\\'):
 	img_file = 'F:\\Car data\\kitti\\data_tracking\\training\\image_02\\0000\\' + frame
 	img = cv2.imread(img_file)
 
@@ -23,10 +92,10 @@ def drawObjectRects(frame, bb, isGen):
 		if rects[i][0] <= rects[i][2] and rects[i][1] <= rects[i][3]:
 			img = cv2.rectangle(img, (rects[i][0], rects[i][1]), (rects[i][2], rects[i][3]), (0,255,0), 5)
 		else:	# model has ltrb wrong
-			img = cv2.rectangle(img, (rects[i][0], rects[i][1]), (rects[i][2], rects[i][3]), (255,0,0), 5)
+			img = cv2.rectangle(img, (rects[i][0], rects[i][1]), (rects[i][2], rects[i][3]), (0,0,255), 5)
 
 	prefix = "gen" if isGen else "real"
-	cv2.imwrite("C:\\Users\\Max\\Research\\maxGAN\\bb images\\" + prefix + frame, img );
+	cv2.imwrite(folder_dir + prefix + frame, img);
 
 	return
 

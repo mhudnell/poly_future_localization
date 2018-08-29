@@ -26,16 +26,15 @@ k_d = 2  # 1 number of discriminator network updates per adversarial training st
 k_g = 1  # 1 number of generator network updates per adversarial training step
 
 starting_step = 0
-cache_prefix = 'maxGAN_bs{}_lr{}expDecay5_kd{}_kg{}_steps{}_smoothL1_leaky_ALLbincrossentropy'.format(batch_size, lr, k_d, k_g, nb_steps)
-# cache_prefix = 'maxGAN_bs{}_lr{}_kd{}_kg{}'.format(batch_size, lr, k_d, k_g)
-data_dir = 'C:\\Users\\Max\\Research\\maxGAN\\weights\\'+cache_prefix+'\\'
+model_name = 'maxGAN_dir_test_bs{}_lr{}expDecay5_kd{}_kg{}_steps{}'.format(batch_size, lr, k_d, k_g, nb_steps)
+output_dir = 'C:\\Users\\Max\\Research\\maxGAN\\models\\'+model_name+'\\'
 show = True
 
-model_components = [ cache_prefix, starting_step,
+model_components = [ model_name, starting_step,
                     data_cols, label_cols, label_dim,
                     generator_model, discriminator_model, combined_model,
                     nb_steps, batch_size, k_d, k_g,
-                    log_interval, data_dir, show]
+                    log_interval, show, output_dir]
     
 [combined_loss, disc_loss_generated, disc_loss_real, disc_loss, avg_gen_pred, avg_real_pred] = gan_1obj.training_steps_GAN(model_components)
 
@@ -49,11 +48,11 @@ ax1.plot(x, disc_loss_real, label='discrim loss real')
 ax1.plot(x, disc_loss, label='discrim loss')
 ax1.plot(x, combined_loss, label='generator loss')
 ax1.legend(loc=1)
-fig.suptitle(cache_prefix, fontsize=20)
+fig.suptitle(model_name, fontsize=20)
 plt.xlabel('number of steps', fontsize=18)
 plt.ylabel('loss', fontsize=16)
 
-plt.savefig('loss plots\\' + cache_prefix + '.png')
+plt.savefig(output_dir + 'loss_plot.png')
 
 # PLOT DISCRIM PREDICTIONS
 
@@ -65,8 +64,8 @@ ax1.plot(x, avg_gen_pred, label='avg_gen_pred')
 ax1.plot(x, avg_real_pred, label='avg_real_pred')
 
 ax1.legend(loc=1)
-fig.suptitle(cache_prefix, fontsize=20)
+fig.suptitle(model_name, fontsize=20)
 plt.xlabel('epoch', fontsize=18)
 plt.ylabel('avg prediction', fontsize=16)
 
-plt.savefig('discrim plots\\' + cache_prefix + '.png')
+plt.savefig(output_dir + 'discrim_prediction_plot.png')

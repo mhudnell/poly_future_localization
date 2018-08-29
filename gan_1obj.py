@@ -187,11 +187,11 @@ def define_models_GAN(gen_input_dim, discrim_input_dim, base_n_count, type=None)
 
 def training_steps_GAN(model_components):
     
-    [ cache_prefix, starting_step, data_cols,
+    [ model_name, starting_step, data_cols,
                         label_cols, label_dim,
                         generator_model, discriminator_model, combined_model,
                         nb_steps, batch_size, k_d, k_g,
-                        log_interval, data_dir, show] = model_components 
+                        log_interval, show, output_dir] = model_components 
 
     data_x, data_y, _, _ = get_data()
 
@@ -200,9 +200,9 @@ def training_steps_GAN(model_components):
     avg_gen_pred, avg_real_pred = [], []    # store average discrim prediction for generated and real samples every epoch.
 
 
-    if not os.path.exists(data_dir):
-        os.makedirs(data_dir)
-    lossFile = open(data_dir + 'losses.txt', 'w')
+    if not os.path.exists(output_dir + 'weights\\'):
+        os.makedirs(output_dir + 'weights\\')
+    lossFile = open(output_dir + 'losses.txt', 'w')
     
     for i in range(1, nb_steps+1):
         K.set_learning_phase(1) # 1 = train
@@ -299,10 +299,10 @@ def training_steps_GAN(model_components):
             
             # if show:
             #     PlotData( x, g_z, data_cols, label_cols, seed=0, with_class=with_class, discrim_input_dim=discrim_input_dim, 
-            #                 save=False, prefix= data_dir + cache_prefix + '_' + str(i) )
+            #                 save=False, prefix= output_dir + model_name + '_' + str(i) )
             
             # SAVE MODEL CHECKPOINTS
-            model_checkpoint_base_name = data_dir + '{}_weights_step_{}.h5'
+            model_checkpoint_base_name = output_dir + 'weights\\{}_weights_step_{}.h5'
             generator_model.save_weights(model_checkpoint_base_name.format('gen', i))
             discriminator_model.save_weights(model_checkpoint_base_name.format('discrim', i))
     
@@ -351,7 +351,7 @@ def getModel(data_cols, generator_model_path = None, discriminator_model_path = 
     Tests model on the first sample in the data set.
     TODO: implement
 '''
-def testModel(generator_model, discriminator_model, combined_model, cache_prefix):
+def testModel(generator_model, discriminator_model, combined_model, model_name):
     data_x, data_y, files_x, files_y = get_data()
 
     # print(files_x[:10])
@@ -360,7 +360,7 @@ def testModel(generator_model, discriminator_model, combined_model, cache_prefix
     # print(data_x[:,:,0])
     # print(data_x[:,:,2])
 
-    data_dir = 'C:\\Users\\Max\\Research\\maxGAN\\bb images\\'+cache_prefix+'\\'
+    data_dir = 'C:\\Users\\Max\\Research\\maxGAN\\bb images\\'+model_name+'\\'
     if not os.path.exists(data_dir):
         os.makedirs(data_dir)
 
@@ -422,10 +422,10 @@ def testModel(generator_model, discriminator_model, combined_model, cache_prefix
 '''
     Tests model on the first sample in the data set.
 '''
-def testModelMult(generator_model, discriminator_model, combined_model, cache_prefix):
+def testModelMult(generator_model, discriminator_model, combined_model, model_name):
     data_x, data_y, files_x, files_y = get_data()
 
-    data_dir = 'C:\\Users\\Max\\Research\\maxGAN\\bb images\\'+cache_prefix+'\\'
+    data_dir = 'C:\\Users\\Max\\Research\\maxGAN\\bb images\\'+model_name+'\\'
     if not os.path.exists(data_dir):
         os.makedirs(data_dir)
 
@@ -556,12 +556,12 @@ def testDiscrim(generator_model, discriminator_model, combined_model):
 # k_g = 2  # 1 number of generator network updates per adversarial training step
 
 # starting_step = 0
-# cache_prefix = 'noiseGAN_bs{}_lr{}_kd{}_kg{}'.format(batch_size, lr, k_d, k_g)
-# # cache_prefix = 'maxGAN_bs{}_lr{}_kd{}_kg{}'.format(batch_size, lr, k_d, k_g)
-# data_dir = 'C:\\Users\\Max\\Research\\maxGAN\\weights\\'+cache_prefix+'\\'
+# model_name = 'noiseGAN_bs{}_lr{}_kd{}_kg{}'.format(batch_size, lr, k_d, k_g)
+# # model_name = 'maxGAN_bs{}_lr{}_kd{}_kg{}'.format(batch_size, lr, k_d, k_g)
+# data_dir = 'C:\\Users\\Max\\Research\\maxGAN\\weights\\'+model_name+'\\'
 # show = True
 
-# model_components = [ cache_prefix, starting_step,
+# model_components = [ model_name, starting_step,
 #                     data_cols, label_cols, label_dim,
 #                     generator_model, discriminator_model, combined_model,
 #                     nb_steps, batch_size, k_d, k_g,
@@ -579,11 +579,11 @@ def testDiscrim(generator_model, discriminator_model, combined_model):
 # ax1.plot(x, disc_loss, label='discrim loss')
 # ax1.plot(x, combined_loss, label='generator loss')
 # ax1.legend(loc=1)
-# fig.suptitle(cache_prefix, fontsize=20)
+# fig.suptitle(model_name, fontsize=20)
 # plt.xlabel('number of steps', fontsize=18)
 # plt.ylabel('loss', fontsize=16)
 
-# plt.savefig('loss plots\\' + cache_prefix + '_loss_plot.png')
+# plt.savefig('loss plots\\' + model_name + '_loss_plot.png')
 
 # ## TESTING ##
 # # LOAD MODEL

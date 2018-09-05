@@ -28,14 +28,15 @@ def drawFrameRects(sample_set, frame, objId, bb, isGen, folder_dir):
         bb_int[i][2] = int(float(nums[2]))
         bb_int[i][3] = int(float(nums[3]))
 
-    box_color = (0,255,0) if isGen else (255, 0, 0)
+    # Draw target box in green if ground truth, blue if generated (color is specified in (b,g,r) format)
+    target_color = (255,0,0) if isGen else (0, 255, 0)
 
     # Draw each bounding box on the image.
     for i in range(len(bb_int)):
         if i < 10:
             img = cv2.rectangle(img, (bb_int[i][0], bb_int[i][1]), (bb_int[i][0] + bb_int[i][2], bb_int[i][1] + bb_int[i][3]), (61,165,244,0.5), 5)     # draw past frames in orange
         else:
-            img = cv2.rectangle(img, (bb_int[i][0], bb_int[i][1]), (bb_int[i][0] + bb_int[i][2], bb_int[i][1] + bb_int[i][3]), box_color, 5)            # draw future frame in green
+            img = cv2.rectangle(img, (bb_int[i][0], bb_int[i][1]), (bb_int[i][0] + bb_int[i][2], bb_int[i][1] + bb_int[i][3]), target_color, 5)            # draw future frame in color: 'target_color'
 
     # Write image to file.
     suffix = "generated" if isGen else "target"

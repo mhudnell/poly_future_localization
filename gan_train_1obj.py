@@ -13,7 +13,7 @@ print("data_cols: ", data_cols)
 ## TRAINING ##
 # CREATE NEW MODEL
 lr = .0005 # .0005 # 5e-4, 5e-5
-generator_model, discriminator_model, combined_model = gan_1obj.getModel(data_cols, lr=lr)
+generator_model, discriminator_model, combined_model = gan_1obj.get_model(data_cols, lr=lr)
 
 # DEFINE TRAINING PARAMS
 label_cols = []

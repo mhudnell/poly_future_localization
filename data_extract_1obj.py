@@ -8,7 +8,7 @@ import os
 from collections import deque
 
 def getLineCounts_1obj():
-
+	"""Check that all 'past' data files have 10 lines, and 'future' data files have 11 lines."""
 	total_past_count = 0
 	badpast_count = 0
 	for subdir, dirs, files in os.walk('F:\\Car data\\label_02_extracted\\past_1obj_LTWH'):
@@ -47,6 +47,10 @@ def getLineCounts_1obj():
 
 
 def generateDataFiles_1obj(fpath):
+	"""
+	Read each kitti data file; identify objects with 15-frame sequences and create 'past' samples using the first 10 frames,
+	and create 'future' samples using the first 10 frames and the 15th (target) frame. Write each 'past' and 'future' sample to its own file.
+	"""
 	f = open(fpath,'r')
 	fname = os.path.splitext(fpath)[0]
 

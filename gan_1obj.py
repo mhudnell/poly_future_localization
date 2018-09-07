@@ -20,7 +20,7 @@ def smoothL1(y_true, y_pred):
 
 def get_data_batch(data_x, data_y, batch_size, seed=0):
     """
-    Retreive (batch_size) number of samples, and return a set of training data (x) and its corresponding target (y) data.
+    Retreive (batch_size) number of samples, and return a set of training data (x) and a copy of the set of training data, with its target appended to the end of it (y).
     Data_x and data_y must be the same length and samples in these arrays should be in the same order (i.e. data_y[i] corresponds to the 'future' positions of data_x[i])
 
     Args:
@@ -58,7 +58,7 @@ def get_data():
 
     Returns:
         past_all ((35082,10,4) array): 
-        future_all ((35082,10,4) array): 
+        future_all ((35082,11,4) array): 
         past_files ((35082,1) array): 
         future_files: ((35082,1) array): 
     """

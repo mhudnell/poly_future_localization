@@ -12,6 +12,30 @@ import re
 
 from vis_tool import drawFrameRects
 
+set_dimensions = {
+    '0000': (375, 1242, 3),
+    '0001': (375, 1242, 3),
+    '0002': (375, 1242, 3),
+    '0003': (375, 1242, 3),
+    '0004': (375, 1242, 3),
+    '0005': (375, 1242, 3),
+    '0006': (375, 1242, 3),
+    '0007': (375, 1242, 3),
+    '0008': (375, 1242, 3),
+    '0009': (375, 1242, 3),
+    '0010': (375, 1242, 3),
+    '0011': (375, 1242, 3),
+    '0012': (375, 1242, 3),
+    '0013': (375, 1242, 3),
+    '0014': (370, 1224, 3),
+    '0015': (370, 1224, 3),
+    '0016': (370, 1224, 3),
+    '0017': (370, 1224, 3),
+    '0018': (374, 1238, 3),
+    '0019': (374, 1238, 3),
+    '0020': (376, 1241, 3),
+}
+
 def smoothL1(y_true, y_pred):
     tmp = tf.abs(y_pred - y_true)
     condition = tf.less(tmp, 1.)
@@ -67,9 +91,10 @@ def get_data():
 
     file_num1 = 0
     for path, subdirs, files in os.walk('F:\\Car data\\label_02_extracted\\past_1obj_LTWH'):
+        sample_set = os.path.basename(path)
         for name in files:
             fpath = os.path.join(path, name)
-            past_files.append(fpath)
+            past_files.append((sample_set,fpath))
             f = open(fpath,'r')
             past_one = np.empty([10, 4])
             for i in range(10):
@@ -86,9 +111,10 @@ def get_data():
 
     file_num2 = 0
     for path, subdirs, files in os.walk('F:\\Car data\\label_02_extracted\\future_1obj_LTWH'):
+        sample_set = os.path.basename(path)
         for name in files:
             fpath = os.path.join(path, name)
-            future_files.append(fpath)
+            future_files.append((sample_set,fpath))
             f = open(fpath,'r')
             future_one = np.empty([11, 4])
             for i in range(11):
@@ -101,14 +127,25 @@ def get_data():
             file_num2 += 1
 
     # Normalize LTWH values to range [0..1]
-    past_all[:,:,0] = past_all[:,:,0] / 1240        # L
-    past_all[:,:,1] = past_all[:,:,1] / 374         # T
-    past_all[:,:,2] = past_all[:,:,2] / 1240        # W
-    past_all[:,:,3] = past_all[:,:,3] / 374         # H
-    future_all[:,:,0] = future_all[:,:,0] / 1240
-    future_all[:,:,1] = future_all[:,:,1] / 374
-    future_all[:,:,2] = future_all[:,:,2] / 1240
-    future_all[:,:,3] = future_all[:,:,3] / 374
+    for i in range(len(past_all)):
+        past_sample = past_all[i]
+        future_sample = future_all[i]
+        if past_files[i][0] != future_files[i][0]:
+            raise Exception("Dimensions of past and future sample should match!")
+        sample_set = past_files[i][0]
+        dimensions = set_dimensions[sample_set]
+        height = dimensions[0]
+        width = dimensions[1]
+        for timestep in past_sample:
+            timestep[0] = min(1, max(0, timestep[0] / width))
+            timestep[1] = min(1, max(0, timestep[1] / height))
+            timestep[2] = min(1, max(0, timestep[2] / width))
+            timestep[3] = min(1, max(0, timestep[3] / height))
+        for timestep in future_sample:
+            timestep[0] = min(1, max(0, timestep[0] / width))
+            timestep[1] = min(1, max(0, timestep[1] / height))
+            timestep[2] = min(1, max(0, timestep[2] / width))
+            timestep[3] = min(1, max(0, timestep[3] / height))
 
     return past_all, future_all, past_files, future_files
 
@@ -359,7 +396,7 @@ def test_model_multiple(generator_model, discriminator_model, combined_model, mo
 
     for i in test_set:
         regex_str = 'F:\\\\Car data\\\\label_02_extracted\\\\past_1obj_LTWH\\\\(.+?)\\\\past.*?_objId(.+?)_frameNum(.+?)\.txt'
-        m = re.search(regex_str, files_x[i])
+        m = re.search(regex_str, files_x[i][1])
         folder = m.group(1)
         objId = m.group(2)
         frame = m.group(3).zfill(6)

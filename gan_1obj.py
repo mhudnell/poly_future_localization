@@ -103,6 +103,7 @@ def get_data():
                     break
                 words = line.split()
                 past_one[i] = [float(word) for word in words]
+            f.close()
             past_all[file_num1] = past_one
             file_num1 += 1
 
@@ -123,6 +124,7 @@ def get_data():
                     break
                 words = line.split()
                 future_one[i] = [float(word) for word in words]
+            f.close()
             future_all[file_num2] = future_one
             file_num2 += 1
 

@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 
 data_cols = []
 for fNum in range(1,12):
-	for char in ['L', 'T', 'W', 'H']:
-		data_cols.append(char + str(fNum))
+  for char in ['L', 'T', 'W', 'H']:
+    data_cols.append(char + str(fNum))
 
 print("data_cols: ", data_cols)
 
@@ -26,7 +26,7 @@ k_d = 2  # 1 number of discriminator network updates per adversarial training st
 k_g = 1  # 1 number of generator network updates per adversarial training step
 
 starting_step = 0
-model_name = 'maxGAN_dir_test_bs{}_lr{}expDecay5_kd{}_kg{}_steps{}'.format(batch_size, lr, k_d, k_g, nb_steps)
+model_name = 'maxGAN_norm_test_bs{}_lr{}expDecay5_kd{}_kg{}_steps{}'.format(batch_size, lr, k_d, k_g, nb_steps)
 output_dir = 'C:\\Users\\Max\\Research\\maxGAN\\models\\'+model_name+'\\'
 show = True
 

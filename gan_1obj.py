@@ -1,6 +1,5 @@
 import numpy as np
 import matplotlib.pyplot as plt
-
 from keras import applications
 from keras import backend as K
 from keras import layers
@@ -11,146 +10,13 @@ import os
 import re
 
 from vis_tool import drawFrameRects
+import data_extract_1obj
 
-set_dimensions = {
-  '0000': (375, 1242, 3),
-  '0001': (375, 1242, 3),
-  '0002': (375, 1242, 3),
-  '0003': (375, 1242, 3),
-  '0004': (375, 1242, 3),
-  '0005': (375, 1242, 3),
-  '0006': (375, 1242, 3),
-  '0007': (375, 1242, 3),
-  '0008': (375, 1242, 3),
-  '0009': (375, 1242, 3),
-  '0010': (375, 1242, 3),
-  '0011': (375, 1242, 3),
-  '0012': (375, 1242, 3),
-  '0013': (375, 1242, 3),
-  '0014': (370, 1224, 3),
-  '0015': (370, 1224, 3),
-  '0016': (370, 1224, 3),
-  '0017': (370, 1224, 3),
-  '0018': (374, 1238, 3),
-  '0019': (374, 1238, 3),
-  '0020': (376, 1241, 3),
-}
 
 def smoothL1(y_true, y_pred):
   tmp = tf.abs(y_pred - y_true)
   condition = tf.less(tmp, 1.)
   return tf.reduce_sum(tf.where(condition, tf.scalar_mul(0.5,tf.square(tmp)), tmp - 0.5), axis=-1)
-
-
-def get_data_batch(data_x, data_y, batch_size, seed=0):
-  """
-  Retreive (batch_size) number of samples, and return a set of training data (x) and a copy of the set of training data, with its target appended to the end of it (y).
-  Data_x and data_y must be the same length and samples in these arrays should be in the same order (i.e. data_y[i] corresponds to the 'future' positions of data_x[i])
-
-  Args:
-    data_x (array): The full set of observed data.
-    data_y (array): The full set of target data.
-    batch_size (int): The number of samples to return.
-    seed (int): A seed to set for the random sample generator, to be used for debug purposes.
-  """
-  numSamples = len(data_x)
-  if numSamples != len(data_y): print('ERROR')
-
-  # get a random start index in range: [0, numSamples]
-  start_i = (batch_size * seed) % numSamples
-  stop_i = start_i + batch_size
-
-  # generates a list of randomly shuffled indices
-  shuffle_seed = (batch_size * seed) // numSamples
-  np.random.seed(shuffle_seed)
-  indices = np.random.choice(numSamples, size=numSamples, replace=False )
-  indices = list(indices) + list(indices) # duplicate to cover ranges past the end of the set (when stop_i > numSamples)
-
-  # acquire random batches
-  x = data_x[ indices[ start_i: stop_i ] ]
-  y = data_y[ indices[ start_i: stop_i ] ]
-
-  if batch_size == 1:
-    print(indices[ start_i: stop_i ])
-  
-  return np.reshape(x, (batch_size, -1) ), np.reshape(y, (batch_size, -1) )
-
-def get_data():
-  """
-  Retrieve past and future data from the specified folders, and return the values in arrays.
-  Also return the file paths associated with each set of data.
-
-  Returns:
-    past_all ((35082,10,4) array): 
-    future_all ((35082,11,4) array): 
-    past_files ((35082,1) array): 
-    future_files: ((35082,1) array): 
-  """
-  past_all = np.empty([35082, 10, 4])
-  past_files = []
-
-  file_num1 = 0
-  for path, subdirs, files in os.walk('F:\\Car data\\label_02_extracted\\past_1obj_LTWH'):
-    sample_set = os.path.basename(path)
-    for name in files:
-      fpath = os.path.join(path, name)
-      past_files.append((sample_set,fpath))
-      f = open(fpath,'r')
-      past_one = np.empty([10, 4])
-      for i in range(10):
-        line = f.readline()
-        if not line:
-          break
-        words = line.split()
-        past_one[i] = [float(word) for word in words]
-      f.close()
-      past_all[file_num1] = past_one
-      file_num1 += 1
-
-  future_all = np.empty([35082, 11, 4])
-  future_files = []
-
-  file_num2 = 0
-  for path, subdirs, files in os.walk('F:\\Car data\\label_02_extracted\\future_1obj_LTWH'):
-    sample_set = os.path.basename(path)
-    for name in files:
-      fpath = os.path.join(path, name)
-      future_files.append((sample_set,fpath))
-      f = open(fpath,'r')
-      future_one = np.empty([11, 4])
-      for i in range(11):
-        line = f.readline()
-        if not line:
-          break
-        words = line.split()
-        future_one[i] = [float(word) for word in words]
-      f.close()
-      future_all[file_num2] = future_one
-      file_num2 += 1
-
-  # Normalize LTWH values to range [0..1]
-  for i in range(len(past_all)):
-    past_sample = past_all[i]
-    future_sample = future_all[i]
-    if past_files[i][0] != future_files[i][0]:
-      raise Exception("Dimensions of past and future sample should match!")
-    sample_set = past_files[i][0]
-    dimensions = set_dimensions[sample_set]
-    height = dimensions[0]
-    width = dimensions[1]
-    for timestep in past_sample:
-      timestep[0] = min(1, max(0, timestep[0] / width))
-      timestep[1] = min(1, max(0, timestep[1] / height))
-      timestep[2] = min(1, max(0, timestep[2] / width))
-      timestep[3] = min(1, max(0, timestep[3] / height))
-    for timestep in future_sample:
-      timestep[0] = min(1, max(0, timestep[0] / width))
-      timestep[1] = min(1, max(0, timestep[1] / height))
-      timestep[2] = min(1, max(0, timestep[2] / width))
-      timestep[3] = min(1, max(0, timestep[3] / height))
-
-  return past_all, future_all, past_files, future_files
-
 
 def generator_network(x, discrim_input_dim, base_n_count): 
   x = layers.Dense(base_n_count)(x)
@@ -205,7 +71,7 @@ def training_steps_GAN(model_components):
             nb_steps, batch_size, k_d, k_g,
             log_interval, show, output_dir] = model_components 
 
-  data_x, data_y, _, _ = get_data()
+  samples, _ = data_extract_1obj.get_kitti_data(normalize=True)
   combined_loss, disc_loss_generated, disc_loss_real, disc_loss = [], [], [], []
 
   # Store average discrim prediction for generated and real samples every epoch.
@@ -224,23 +90,23 @@ def training_steps_GAN(model_components):
     # k_d [1]: num of discriminator model updates per training step
     # batch_size [32]: the number of samples trained on during each step (if == len(data_x) then equivalent to 1 epoch?)
     for j in range(k_d):
-      np.random.seed(i+j)
-      x, y = get_data_batch(data_x, data_y, batch_size, seed=i+j)
-      if i == 1 and j == 0: 
-        print("x.shape: ", x.shape)
-        print(x[0])
+      batch = data_extract_1obj.get_batch(samples, batch_size)
+      gen_input = batch[:,:10*4]  # Only keep first 10 bounding boxes for gen input (11th is the target)
+      # if i == 1 and j == 0: 
+      #   print("x.shape: ", x.shape)
+      #   print(x[0])
       
-      g_z = generator_model.predict(x)
-      if i == 1 and j == 0:
-        print("g_z.shape: ", g_z.shape)
-        print(g_z[0])
-      g_z = np.concatenate((x, g_z), axis=1)
-      if i == 1 and j == 0:
-        print("new g_z.shape: ", g_z.shape)
-        print(g_z[0])
+      g_z = generator_model.predict(gen_input)
+      # if i == 1 and j == 0:
+      #   print("g_z.shape: ", g_z.shape)
+      #   print(g_z[0])
+      g_z = np.concatenate((gen_input, g_z), axis=1)
+      # if i == 1 and j == 0:
+      #   print("new g_z.shape: ", g_z.shape)
+      #   print(g_z[0])
       
       ### TRAIN ON REAL (y = 1) w/ noise
-      disc_real_results = discriminator_model.train_on_batch(y, np.random.uniform(low=0.999, high=1.0, size=batch_size))      # 0.7, 1.2 GANs need noise to prevent loss going to zero
+      disc_real_results = discriminator_model.train_on_batch(batch, np.random.uniform(low=0.999, high=1.0, size=batch_size))      # 0.7, 1.2 GANs need noise to prevent loss going to zero
 
       ### TRAIN ON GENERATED (y = 0) w/ noise
       disc_gen_results = discriminator_model.train_on_batch(g_z, np.random.uniform(low=0.0, high=0.001, size=batch_size))    # 0.0, 0.3
@@ -254,11 +120,11 @@ def training_steps_GAN(model_components):
     #
     # k_g [1]: num of generator model updates per training step
     for j in range(k_g):
-      np.random.seed(i+j)
-      x, y = get_data_batch(data_x, data_y, batch_size, seed=i+j)
+      batch = data_extract_1obj.get_batch(samples, batch_size)
+      gen_input = batch[:,:10*4]  # Only keep first 10 bounding boxes for gen input (11th is the target)
       
       ### TRAIN (y = 1) bc want pos feedback for tricking discrim (want discrim to output 1)
-      comb_results = combined_model.train_on_batch(x, np.random.uniform(low=0.999, high=1.0, size=batch_size))    # 0.7, 1.2
+      comb_results = combined_model.train_on_batch(gen_input, np.random.uniform(low=0.999, high=1.0, size=batch_size))    # 0.7, 1.2
 
     combined_loss.append(comb_results)
 
@@ -336,59 +202,59 @@ def get_model(data_cols, generator_model_path = None, discriminator_model_path =
 
   return generator_model, discriminator_model, combined_model
 
-def test_model(generator_model, discriminator_model, combined_model, model_name):
-  """Test model on a hand-picked sample from the data set."""
-  data_x, data_y, files_x, files_y = get_data()
+# def test_model(generator_model, discriminator_model, combined_model, model_name):
+#   """Test model on a hand-picked sample from the data set."""
+#   data_x, data_y, files_x, files_y = get_data()
 
-  data_dir = 'C:\\Users\\Max\\Research\\maxGAN\\models\\'+model_name+'\\bounding box images\\'
-  if not os.path.exists(data_dir):
-    os.makedirs(data_dir)
+#   data_dir = 'C:\\Users\\Max\\Research\\maxGAN\\models\\'+model_name+'\\bounding box images\\'
+#   if not os.path.exists(data_dir):
+#     os.makedirs(data_dir)
 
-  test_x_pretty = data_x[20000]
-  test_y_pretty = data_y[20000]
-  print("file_x: ", files_x[20000])
-  print("file_x: ", files_y[20000])
+#   test_x_pretty = data_x[20000]
+#   test_y_pretty = data_y[20000]
+#   print("file_x: ", files_x[20000])
+#   print("file_x: ", files_y[20000])
   
-  test_x = np.reshape(test_x_pretty, (1, -1))
-  test_y = np.reshape(test_y_pretty, (1, -1))
+#   test_x = np.reshape(test_x_pretty, (1, -1))
+#   test_y = np.reshape(test_y_pretty, (1, -1))
 
-  test_g_z = generator_model.predict(test_x)
-  test_g_z = np.concatenate((test_x, test_g_z), axis=1)
-  test_g_z_pretty = np.reshape(test_g_z, (11,4))
+#   test_g_z = generator_model.predict(test_x)
+#   test_g_z = np.concatenate((test_x, test_g_z), axis=1)
+#   test_g_z_pretty = np.reshape(test_g_z, (11,4))
 
-  dpred_real = discriminator_model.predict(test_y)
-  dpred_gen = discriminator_model.predict(test_g_z)
-  print("dpred_real: ", dpred_real," dpred_gen: ", dpred_gen)
+#   dpred_real = discriminator_model.predict(test_y)
+#   dpred_gen = discriminator_model.predict(test_g_z)
+#   print("dpred_real: ", dpred_real," dpred_gen: ", dpred_gen)
 
-  # Undo normalization.
-  test_g_z_pretty[:,0] = test_g_z_pretty[:,0] * 1240  # L
-  test_g_z_pretty[:,1] = test_g_z_pretty[:,1] * 374   # T
-  test_g_z_pretty[:,2] = test_g_z_pretty[:,2] * 1240  # W
-  test_g_z_pretty[:,3] = test_g_z_pretty[:,3] * 374   # H
-  test_y_pretty[:,0] = test_y_pretty[:,0] * 1240
-  test_y_pretty[:,1] = test_y_pretty[:,1] * 374
-  test_y_pretty[:,2] = test_y_pretty[:,2] * 1240
-  test_y_pretty[:,3] = test_y_pretty[:,3] * 374
+#   # Undo normalization.
+#   test_g_z_pretty[:,0] = test_g_z_pretty[:,0] * 1240  # L
+#   test_g_z_pretty[:,1] = test_g_z_pretty[:,1] * 374   # T
+#   test_g_z_pretty[:,2] = test_g_z_pretty[:,2] * 1240  # W
+#   test_g_z_pretty[:,3] = test_g_z_pretty[:,3] * 374   # H
+#   test_y_pretty[:,0] = test_y_pretty[:,0] * 1240
+#   test_y_pretty[:,1] = test_y_pretty[:,1] * 374
+#   test_y_pretty[:,2] = test_y_pretty[:,2] * 1240
+#   test_y_pretty[:,3] = test_y_pretty[:,3] * 374
 
-  # # Log results.
-  # realfile = open(data_dir+'real.txt', 'w')
-  # genfile = open(data_dir+'gen.txt', 'w')
-  # realfile.write("%s\n" % test_y_pretty[10])
-  # genfile.write("%s\n" % test_g_z_pretty[10])
+#   # # Log results.
+#   # realfile = open(data_dir+'real.txt', 'w')
+#   # genfile = open(data_dir+'gen.txt', 'w')
+#   # realfile.write("%s\n" % test_y_pretty[10])
+#   # genfile.write("%s\n" % test_g_z_pretty[10])
 
-  # Draw Results.
-  frames = ['000040.png']
-  print("test_g_z_pretty: ",test_g_z_pretty)
-  print("test_y_pretty: ",test_y_pretty)
-  drawFrameRects('0016', frames[0], test_g_z_pretty, isGen=True, folder_dir=data_dir)
-  drawFrameRects('0016', frames[0], test_y_pretty, isGen=False, folder_dir=data_dir)
+#   # Draw Results.
+#   frames = ['000040.png']
+#   print("test_g_z_pretty: ",test_g_z_pretty)
+#   print("test_y_pretty: ",test_y_pretty)
+#   drawFrameRects('0016', frames[0], test_g_z_pretty, isGen=True, folder_dir=data_dir)
+#   drawFrameRects('0016', frames[0], test_y_pretty, isGen=False, folder_dir=data_dir)
 
-  return
+#   return
 
 
 def test_model_multiple(generator_model, discriminator_model, combined_model, model_name):
   """Test model on a hand-picked set of samples from the data set."""
-  data_x, data_y, files_x, files_y = get_data()
+  samples, samples_info = data_extract_1obj.get_kitti_data(normalize=True)
 
   data_dir = 'C:\\Users\\Max\\Research\\maxGAN\\models\\'+model_name+'\\bounding box images\\'
   if not os.path.exists(data_dir):
@@ -397,47 +263,39 @@ def test_model_multiple(generator_model, discriminator_model, combined_model, mo
   test_set = [0, 1234, 2345, 3456, 10000, 15000, 19999, 20000]
 
   for i in test_set:
-    regex_str = 'F:\\\\Car data\\\\label_02_extracted\\\\past_1obj_LTWH\\\\(.+?)\\\\past.*?_objId(.+?)_frameNum(.+?)\.txt'
-    m = re.search(regex_str, files_x[i][1])
-    folder = m.group(1)
-    objId = m.group(2)
-    frame = m.group(3).zfill(6)
-    print(folder, ' ', frame)
+    sample_set = samples_info[i][0]
+    frame = samples_info[i][1]
+    object_id = samples_info[i][2]
+    print("sample_set: ", sample_set, "frame: ", frame, "object_id", object_id)
 
-    test_x_pretty = data_x[i]
-    test_y_pretty = data_y[i]
+    target = samples[i]
     
-    test_x = np.reshape(test_x_pretty, (1, -1))
-    test_y = np.reshape(test_y_pretty, (1, -1))
+    target_vector = np.reshape(target, (1, -1))
+    generator_vector = target_vector[:,:10*4]
 
-    test_g_z = generator_model.predict(test_x)
-    test_g_z = np.concatenate((test_x, test_g_z), axis=1)
-    test_g_z_pretty = np.reshape(test_g_z, (11,4))
+    g_z = generator_model.predict(generator_vector)
+    generated_vector = np.concatenate((generator_vector, g_z), axis=1)
+    generated = np.reshape(generated_vector, (11,4))
 
-    dpred_real = discriminator_model.predict(test_y)
-    dpred_gen = discriminator_model.predict(test_g_z)
-    print("dpred_real: ", dpred_real," dpred_gen: ", dpred_gen)
+    d_pred_real = discriminator_model.predict(target_vector)
+    d_pred_gen = discriminator_model.predict(generated_vector)
+    print("d_pred_real: ", d_pred_real," d_pred_gen: ", d_pred_gen)
 
     # Undo normalization.
-    test_g_z_pretty[:,0] = test_g_z_pretty[:,0] * 1240
-    test_g_z_pretty[:,1] = test_g_z_pretty[:,1] * 374
-    test_g_z_pretty[:,2] = test_g_z_pretty[:,2] * 1240
-    test_g_z_pretty[:,3] = test_g_z_pretty[:,3] * 374
-    test_y_pretty[:,0] = test_y_pretty[:,0] * 1240
-    test_y_pretty[:,1] = test_y_pretty[:,1] * 374
-    test_y_pretty[:,2] = test_y_pretty[:,2] * 1240
-    test_y_pretty[:,3] = test_y_pretty[:,3] * 374
+    g_z_formatted = data_extract_1obj.unnormalize_sample(generated, sample_set)
+    sample = data_extract_1obj.unnormalize_sample(target, sample_set)
 
     # Draw Results.
-    drawFrameRects(folder, frame, objId, test_g_z_pretty, isGen=True, folder_dir=data_dir)
-    drawFrameRects(folder, frame, objId, test_y_pretty, isGen=False, folder_dir=data_dir)
+    drawFrameRects(sample_set, frame, object_id, generated, isGen=True, folder_dir=data_dir)
+    drawFrameRects(sample_set, frame, object_id, target, isGen=False, folder_dir=data_dir)
 
   return
 
 def test_discrim(generator_model, discriminator_model, combined_model):
   """Test the discriminator by having it produce a realness score for generated and target images in a sample set."""
-  data_x, data_y, files_x, files_y = get_data()
-  data_x, data_y = get_data_batch(data_x, data_y, 590, seed=7)
+  samples, _ = data_extract_1obj.get_kitti_data(normalize=True)
+  batch = data_extract_1obj.get_batch(samples, 590)  # , seed=7
+
   gen_correct = 0
   gen_incorrect = 0
   gen_unsure = 0
@@ -446,40 +304,39 @@ def test_discrim(generator_model, discriminator_model, combined_model):
   real_incorrect = 0
   real_unsure = 0
 
-  discrim_outs_gen = np.zeros(shape=len(data_x))
-  discrim_outs_real = np.zeros(shape=len(data_x))
+  d_preds_gen = np.zeros(shape=len(batch))
+  d_preds_real = np.zeros(shape=len(batch))
 
-  for i in range(len(data_x)):
-    test_x_pretty = data_x[i]
-    test_y_pretty = data_y[i]
-    test_x = np.reshape(test_x_pretty, (1, -1))
-    test_y = np.reshape(test_y_pretty, (1, -1))
-    test_g_z = generator_model.predict(test_x)
-    test_g_z = np.concatenate((test_x, test_g_z), axis=1)
-    # test_g_z_pretty = np.reshape(test_g_z, (1,4))
+  for i in range(len(batch)):
+    target_vector = batch[i]
+    
+    # target_vector = np.reshape(target, (1, -1))  # Not needed, each sample in batch is already vectorized
+    generator_vector = target_vector[:,:10*4]
+    g_z = generator_model.predict(generator_vector)
+    generated_vector = np.concatenate((generator_vector, g_z), axis=1)
 
-    dpred_real = discriminator_model.predict(test_y)
-    dpred_gen = discriminator_model.predict(test_g_z)
-    discrim_outs_gen[i] = dpred_gen
-    discrim_outs_real[i] = dpred_real
+    d_pred_real = discriminator_model.predict(target_vector)
+    d_pred_gen = discriminator_model.predict(generated_vector)
+    d_preds_gen[i] = d_pred_gen
+    d_preds_real[i] = d_pred_real
 
-    if dpred_gen == 1.0:
+    if d_pred_gen == 1.0:
       gen_incorrect += 1
-    elif dpred_gen == 0.0:
+    elif d_pred_gen == 0.0:
       gen_correct += 1
     else:
       gen_unsure += 1
 
-    if dpred_real == 1.0:
+    if d_pred_real == 1.0:
       real_correct += 1
-    elif dpred_real == 0.0:
+    elif d_pred_real == 0.0:
       real_incorrect += 1
     else:
       real_unsure += 1
   
-  avg_gen_pred = np.average(discrim_outs_gen)
-  avg_real_pred = np.average(discrim_outs_real)
+  avg_pred_gen = np.average(d_preds_gen)
+  avg_pred_real = np.average(d_preds_real)
 
   # print("gen_correct: ", gen_correct," gen_incorrect: ", gen_incorrect, " gen_unsure: ", gen_unsure, " avg_output: ", avg_gen_pred)
   # print("real_correct: ", real_correct," real_incorrect: ", real_incorrect, " real_unsure: ", real_unsure, " avg_output: ", avg_real_pred)
-  return avg_gen_pred, avg_real_pred
+  return avg_pred_gen, avg_pred_real

@@ -44,10 +44,7 @@ def define_models_GAN(gen_input_dim, discrim_input_dim, base_n_count, type=None)
 
   generated_or_real_image_tensor = layers.Input(shape=(discrim_input_dim,))
   
-  if type == 'Wasserstein':
-    discriminator_output = critic_network(generated_or_real_image_tensor, data_dim, base_n_count)
-  else:
-    discriminator_output = discriminator_network(generated_or_real_image_tensor, discrim_input_dim, base_n_count)
+  discriminator_output = discriminator_network(generated_or_real_image_tensor, discrim_input_dim, base_n_count)
 
   # This creates models which include the Input layer + hidden dense layers + output layer
   generator_model = models.Model(inputs=[generator_input_tensor], outputs=[generated_image_tensor], name='generator')   # Input layer used here a second time
@@ -166,7 +163,7 @@ def training_steps_GAN(model_components):
   return [combined_loss, disc_loss_generated, disc_loss_real, disc_loss, avg_gen_pred, avg_real_pred]
 
 def get_model(data_cols, generator_model_path = None, discriminator_model_path = None, loss_pickle_path = None, seed=0, lr=5e-4):
-  gen_input_dim = 40 # (32) needs to be ~discrim_input_dim
+  gen_input_dim = 40
   base_n_count = 128
   show = True
 

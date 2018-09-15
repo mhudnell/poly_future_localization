@@ -1,12 +1,11 @@
-
 import gan_1obj
 import numpy as np
 import matplotlib.pyplot as plt
 
 data_cols = []
 for fNum in range(1,12):
-  for char in ['L', 'T', 'W', 'H']:
-    data_cols.append(char + str(fNum))
+    for char in ['L', 'T', 'W', 'H']:
+        data_cols.append(char + str(fNum))
 
 print("data_cols: ", data_cols)
 
@@ -26,16 +25,16 @@ k_d = 2  # 1 number of discriminator network updates per adversarial training st
 k_g = 1  # 1 number of generator network updates per adversarial training step
 
 starting_step = 0
-model_name = 'maxGAN_norm_test_bs{}_lr{}expDecay5_kd{}_kg{}_steps{}'.format(batch_size, lr, k_d, k_g, nb_steps)
+model_name = 'maxGAN_combLoss_bs{}_lr{}expDecay5_kd{}_kg{}_steps{}'.format(batch_size, lr, k_d, k_g, nb_steps)
 output_dir = 'C:\\Users\\Max\\Research\\maxGAN\\models\\'+model_name+'\\'
 show = True
 
-model_components = [ model_name, starting_step,
+model_components = [model_name, starting_step,
                     data_cols, label_cols, label_dim,
                     generator_model, discriminator_model, combined_model,
                     nb_steps, batch_size, k_d, k_g,
                     log_interval, show, output_dir]
-    
+
 [combined_loss, disc_loss_generated, disc_loss_real, disc_loss, avg_gen_pred, avg_real_pred] = gan_1obj.training_steps_GAN(model_components)
 
 # PLOT LOSS

@@ -5,6 +5,7 @@ from keras import backend as K
 from keras import layers
 from keras import models
 from keras import optimizers
+from keras import losses
 import tensorflow as tf
 import os
 import re
@@ -17,6 +18,9 @@ def smoothL1(y_true, y_pred):
   tmp = tf.abs(y_pred - y_true)
   condition = tf.less(tmp, 1.)
   return tf.reduce_sum(tf.where(condition, tf.scalar_mul(0.5,tf.square(tmp)), tmp - 0.5), axis=-1)
+
+def combined_loss(y_true, y_pred, a=0.5, b=0.5):
+  return a*losses.binary_crossentropy(y_true, y_pred) + b*smoothL1(y_true, y_pred)
 
 def generator_network(x, discrim_input_dim, base_n_count): 
   x = layers.Dense(base_n_count)(x)
@@ -179,7 +183,7 @@ def get_model(data_cols, generator_model_path = None, discriminator_model_path =
   generator_model.compile(optimizer=adam, loss='binary_crossentropy')
   discriminator_model.compile(optimizer=adam, loss='binary_crossentropy')
   discriminator_model.trainable = False  # Freeze discriminator weights in combined model (we want to improve model by improving generator, rather than making the discriminator worse)
-  combined_model.compile(optimizer=adam, loss='binary_crossentropy')
+  combined_model.compile(optimizer=adam, loss=combined_loss)
   
   if show:
     print(generator_model.summary())

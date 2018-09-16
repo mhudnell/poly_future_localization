@@ -17,7 +17,7 @@ import data_extract_1obj
 def smoothL1(y_true, y_pred):
     tmp = tf.abs(y_pred - y_true)
     condition = tf.less(tmp, 1.)
-    return tf.reduce_sum(tf.where(condition, tf.scalar_mul(0.5,tf.square(tmp)), tmp - 0.5), axis=-1)
+    return tf.reduce_sum(tf.where(condition, tf.scalar_mul(0.5, tf.square(tmp)), tmp - 0.5), axis=-1)
 
 def combined_loss(y_true, y_pred, a=0.5, b=0.5):
     return a*losses.binary_crossentropy(y_true, y_pred) + b*smoothL1(y_true, y_pred)
@@ -44,17 +44,16 @@ def discriminator_network(x, discrim_input_dim, base_n_count):
 
 def define_models_GAN(gen_input_dim, discrim_input_dim, base_n_count, type=None):
     generator_input_tensor = layers.Input(shape=(gen_input_dim, ))
-    generated_image_tensor = generator_network(generator_input_tensor, discrim_input_dim, base_n_count)               # Input layer used here
+    generated_image_tensor = generator_network(generator_input_tensor, discrim_input_dim, base_n_count)
 
     generated_or_real_image_tensor = layers.Input(shape=(discrim_input_dim,))
-
     discriminator_output = discriminator_network(generated_or_real_image_tensor, discrim_input_dim, base_n_count)
 
     # This creates models which include the Input layer + hidden dense layers + output layer
-    generator_model = models.Model(inputs=[generator_input_tensor], outputs=[generated_image_tensor], name='generator')   # Input layer used here a second time
+    generator_model = models.Model(inputs=[generator_input_tensor], outputs=[generated_image_tensor], name='generator')
     discriminator_model = models.Model(inputs=[generated_or_real_image_tensor],
-                                         outputs=[discriminator_output],
-                                         name='discriminator')
+                                       outputs=[discriminator_output],
+                                       name='discriminator')
 
     # 1. generator_model takes generator_input_tensor as input, returns a generated tensor
     # 2. discriminator_model takes generated tensor as input, returns a tensor which is the combined output
@@ -66,14 +65,14 @@ def define_models_GAN(gen_input_dim, discrim_input_dim, base_n_count, type=None)
 
 def training_steps_GAN(model_components):
 
-    [ model_name, starting_step, data_cols,
+    [model_name, starting_step, data_cols,
                         label_cols, label_dim,
                         generator_model, discriminator_model, combined_model,
                         nb_steps, batch_size, k_d, k_g,
                         log_interval, show, output_dir] = model_components
 
     samples, _ = data_extract_1obj.get_kitti_data(normalize=True)
-    combined_loss, disc_loss_generated, disc_loss_real, disc_loss = [], [], [], []
+    G_loss, D_loss_fake, D_loss_real, D_loss = [], [], [], []
 
     # Store average discrim prediction for generated and real samples every epoch.
     avg_gen_pred, avg_real_pred = [], []
@@ -84,7 +83,7 @@ def training_steps_GAN(model_components):
     lossFile = open(output_dir + 'losses.txt', 'w')
 
     for i in range(1, nb_steps+1):
-        K.set_learning_phase(1) # 1 = train
+        K.set_learning_phase(1)  # 1 = train
 
         # TRAIN DISCRIMINATOR on real and generated images
         #
@@ -92,10 +91,10 @@ def training_steps_GAN(model_components):
         # batch_size [32]: the number of samples trained on during each step (if == len(data_x) then equivalent to 1 epoch?)
         for j in range(k_d):
             batch = data_extract_1obj.get_batch(samples, batch_size)
-            gen_input = batch[:,:10*4]  # Only keep first 10 bounding boxes for gen input (11th is the target)
+            gen_input = batch[:, :10*4]  # Only keep first 10 bounding boxes for gen input (11th is the target)
             # if i == 1 and j == 0:
-            #   print("x.shape: ", x.shape)
-            #   print(x[0])
+            #   print("gen_input training shape: ", gen_input.shape)
+            #   print(gen_input[0])
 
             g_z = generator_model.predict(gen_input)
             # if i == 1 and j == 0:
@@ -113,21 +112,21 @@ def training_steps_GAN(model_components):
             disc_gen_results = discriminator_model.train_on_batch(g_z, np.random.uniform(low=0.0, high=0.001, size=batch_size))    # 0.0, 0.3
             d_l = 0.5 * np.add(disc_real_results, disc_gen_results)
 
-        disc_loss_real.append(disc_real_results)
-        disc_loss_generated.append(disc_gen_results)
-        disc_loss.append(d_l)
+        D_loss_real.append(disc_real_results)
+        D_loss_fake.append(disc_gen_results)
+        D_loss.append(d_l)
 
         # TRAIN GENERATOR on real inputs and outputs
         #
         # k_g [1]: num of generator model updates per training step
         for j in range(k_g):
             batch = data_extract_1obj.get_batch(samples, batch_size)
-            gen_input = batch[:,:10*4]  # Only keep first 10 bounding boxes for gen input (11th is the target)
+            gen_input = batch[:, :10*4]  # Only keep first 10 bounding boxes for gen input (11th is the target)
 
             ### TRAIN (y = 1) bc want pos feedback for tricking discrim (want discrim to output 1)
             comb_results = combined_model.train_on_batch(gen_input, np.random.uniform(low=0.999, high=1.0, size=batch_size))    # 0.7, 1.2
 
-        combined_loss.append(comb_results)
+        G_loss.append(comb_results)
 
         # SAVE WEIGHTS / PLOT IMAGES
         if not i % log_interval:
@@ -145,11 +144,11 @@ def training_steps_GAN(model_components):
             # LOSS SUMMARIES
             print('lrs: '+ str(K.get_value(generator_model.optimizer.lr)) + ', ' + str(K.get_value(discriminator_model.optimizer.lr)) + ', ' + str(K.get_value(combined_model.optimizer.lr)))
 
-            print('D_loss_gen: {}.\tD_loss_real: {}.'.format(disc_loss_generated[-1], disc_loss_real[-1]))
-            lossFile.write('D_loss_gen: {}.\tD_loss_real: {}.\n'.format(disc_loss_generated[-1], disc_loss_real[-1]))
+            print('D_loss_gen: {}.\tD_loss_real: {}.'.format(D_loss_fake[-1], D_loss_real[-1]))
+            lossFile.write('D_loss_gen: {}.\tD_loss_real: {}.\n'.format(D_loss_fake[-1], D_loss_real[-1]))
 
-            print('G_loss: {}.\t\tD_loss: {}.'.format(combined_loss[-1], disc_loss[-1]))
-            lossFile.write('G_loss: {}.\t\t\tD_loss: {}.\n'.format(combined_loss[-1], disc_loss[-1]))
+            print('G_loss: {}.\t\tD_loss: {}.'.format(G_loss[-1], D_loss[-1]))
+            lossFile.write('G_loss: {}.\t\t\tD_loss: {}.\n'.format(G_loss[-1], D_loss[-1]))
 
             # if starting_step+nb_steps - i < log_interval*4:
             a_g_p, a_r_p = test_discrim(generator_model, discriminator_model, combined_model)
@@ -164,9 +163,9 @@ def training_steps_GAN(model_components):
             generator_model.save_weights(model_checkpoint_base_name.format('gen', i))
             discriminator_model.save_weights(model_checkpoint_base_name.format('discrim', i))
 
-    return [combined_loss, disc_loss_generated, disc_loss_real, disc_loss, avg_gen_pred, avg_real_pred]
+    return [G_loss, D_loss_fake, D_loss_real, D_loss, avg_gen_pred, avg_real_pred]
 
-def get_model(data_cols, generator_model_path = None, discriminator_model_path = None, loss_pickle_path = None, seed=0, lr=5e-4):
+def get_model(data_cols, generator_model_path=None, discriminator_model_path=None, loss_pickle_path=None, seed=0, lr=5e-4):
     gen_input_dim = 40
     base_n_count = 128
     show = True
@@ -191,9 +190,9 @@ def get_model(data_cols, generator_model_path = None, discriminator_model_path =
         print(combined_model.summary())
 
     # LOAD WEIGHTS (and previous loss logs) IF PROVIDED
-    if loss_pickle_path:
-        print('Loading loss pickles')
-        [combined_loss, disc_loss_generated, disc_loss_real, xgb_losses] = pickle.load(open(loss_pickle_path,'rb'))
+    # if loss_pickle_path:
+    #     print('Loading loss pickles')
+    #     [G_loss, D_loss_fake, D_loss_real, xgb_losses] = pickle.load(open(loss_pickle_path,'rb'))
     if generator_model_path:
         print('Loading generator model')
         generator_model.load_weights(generator_model_path, by_name=True)
@@ -267,24 +266,24 @@ def test_model_multiple(generator_model, discriminator_model, combined_model, mo
         sample_set = samples_info[i][0]
         frame = samples_info[i][1]
         object_id = samples_info[i][2]
-        print("sample_set: ", sample_set, "frame: ", frame, "object_id", object_id)
+        print("sample_set:", sample_set, "frame:", frame, "object_id:", object_id)
 
         target = samples[i]
 
         target_vector = np.reshape(target, (1, -1))
-        generator_vector = target_vector[:,:10*4]
+        gen_input = target_vector[:, :10*4]
 
-        g_z = generator_model.predict(generator_vector)
-        generated_vector = np.concatenate((generator_vector, g_z), axis=1)
-        generated = np.reshape(generated_vector, (11,4))
+        g_z = generator_model.predict(gen_input)
+        gen_out = np.concatenate((gen_input, g_z), axis=1)
+        generated = np.reshape(gen_out, (11, 4))
 
         d_pred_real = discriminator_model.predict(target_vector)
-        d_pred_gen = discriminator_model.predict(generated_vector)
-        print("d_pred_real: ", d_pred_real," d_pred_gen: ", d_pred_gen)
+        d_pred_gen = discriminator_model.predict(gen_out)
+        print("d_pred_real:", d_pred_real, "d_pred_gen:", d_pred_gen)
 
         # Undo normalization.
-        g_z_formatted = data_extract_1obj.unnormalize_sample(generated, sample_set)
-        sample = data_extract_1obj.unnormalize_sample(target, sample_set)
+        data_extract_1obj.unnormalize_sample(generated, sample_set)
+        data_extract_1obj.unnormalize_sample(target, sample_set)
 
         # Draw Results.
         drawFrameRects(sample_set, frame, object_id, generated, isGen=True, folder_dir=data_dir)
@@ -309,15 +308,15 @@ def test_discrim(generator_model, discriminator_model, combined_model):
     d_preds_real = np.zeros(shape=len(batch))
 
     for i in range(len(batch)):
-        target_vector = batch[i]
+        target_vector = batch[i].reshape((1, -1))  # Keras expects a 2d input to predict
 
         # target_vector = np.reshape(target, (1, -1))  # Not needed, each sample in batch is already vectorized
-        generator_vector = target_vector[:,:10*4]
-        g_z = generator_model.predict(generator_vector)
-        generated_vector = np.concatenate((generator_vector, g_z), axis=1)
+        gen_input = target_vector[:, :10*4]  # Leave out target
+        g_z = generator_model.predict(gen_input)
+        gen_out = np.concatenate((gen_input, g_z), axis=1)
 
         d_pred_real = discriminator_model.predict(target_vector)
-        d_pred_gen = discriminator_model.predict(generated_vector)
+        d_pred_gen = discriminator_model.predict(gen_out)
         d_preds_gen[i] = d_pred_gen
         d_preds_real[i] = d_pred_real
 

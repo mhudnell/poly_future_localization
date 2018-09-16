@@ -14,13 +14,13 @@ def drawFrameRects(sample_set, frame, objId, bb, isGen, folder_dir):
         isGen (boolean): Indicates whether the concluding bounding box in 'bb' was generated, or if it is the target.
         folder_dir: The folder to output the drawn images to.
     '''
-    img_file = 'F:\\Car data\\kitti\\data_tracking\\training\\image_02\\'+ sample_set +'\\'+ frame + '.png'
+    img_file = 'F:\\Car data\\kitti\\data_tracking\\training\\image_02\\' + sample_set + '\\' + frame + '.png'
 
     # Load img to draw on.
     img = cv2.imread(img_file)
 
     # Convert bb (LTWH values) to ints.
-    bb_int = np.zeros((len(bb),4), dtype='int32')
+    bb_int = np.zeros((len(bb), 4), dtype='int32')
     for i in range(len(bb_int)):
         nums = bb[i]
         bb_int[i][0] = int(float(nums[0]))
@@ -29,7 +29,7 @@ def drawFrameRects(sample_set, frame, objId, bb, isGen, folder_dir):
         bb_int[i][3] = int(float(nums[3]))
 
     # Draw target box in green if ground truth, blue if generated (color is specified in (b,g,r) format)
-    target_color = (255,0,0) if isGen else (0, 255, 0)
+    target_color = (255, 0, 0) if isGen else (0, 255, 0)
 
     # Draw each bounding box on the image.
     for i in range(len(bb_int)):

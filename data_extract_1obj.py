@@ -200,9 +200,10 @@ def get_batch(samples, batch_size, seed=0):
     batch = samples[indices]
     # print(batch)
 
-    return np.reshape(batch, (batch_size, -1) )
+    return np.reshape(batch, (batch_size, -1))
 
 def normalize_bb(bb, sample_set):
+    '''Normalizes the sample passed in. Since python is pass-by-object, the return value is actually unnecessary.'''
     dimensions = set_dimensions[sample_set]
     h = dimensions[0]
     w = dimensions[1]
@@ -213,20 +214,21 @@ def normalize_bb(bb, sample_set):
     return bb
 
 def unnormalize_sample(sample, sample_set):
+    '''Unnormalizes the sample passed in. Since python is pass-by-object, the return value is actually unnecessary.'''
     dimensions = set_dimensions[sample_set]
     h = dimensions[0]
     w = dimensions[1]
-    sample[:,0] = sample[:,0] * w
-    sample[:,1] = sample[:,1] * h
-    sample[:,2] = sample[:,2] * w
-    sample[:,3] = sample[:,3] * h
+    sample[:, 0] = sample[:, 0] * w
+    sample[:, 1] = sample[:, 1] * h
+    sample[:, 2] = sample[:, 2] * w
+    sample[:, 3] = sample[:, 3] * h
     return sample
 
 if __name__ == '__main__':
     samples, _ = get_kitti_data(normalize=True)
     batch = get_batch(samples, 3, seed=7)
     print(batch)
-    print(batch[:,:4*10])
+    print(batch[:, :4*10])
 
     # samples, _ = get_kitti_data(normalize=True)
     # print(samples)

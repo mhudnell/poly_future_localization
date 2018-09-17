@@ -43,25 +43,24 @@ def discriminator_network(x, discrim_input_dim, base_n_count):
     return x
 
 def define_models_GAN(gen_input_dim, discrim_input_dim, base_n_count, type=None):
-    generator_input_tensor = layers.Input(shape=(gen_input_dim, ))
-    generated_image_tensor = generator_network(generator_input_tensor, discrim_input_dim, base_n_count)
+    G_input = layers.Input(shape=(gen_input_dim, ))
+    G_output = generator_network(G_input, discrim_input_dim, base_n_count)
 
-    generated_or_real_image_tensor = layers.Input(shape=(discrim_input_dim,))
-    discriminator_output = discriminator_network(generated_or_real_image_tensor, discrim_input_dim, base_n_count)
+    D_input = layers.Input(shape=(discrim_input_dim,))
+    D_output = discriminator_network(D_input, discrim_input_dim, base_n_count)
 
     # This creates models which include the Input layer + hidden dense layers + output layer
-    generator_model = models.Model(inputs=[generator_input_tensor], outputs=[generated_image_tensor], name='generator')
-    discriminator_model = models.Model(inputs=[generated_or_real_image_tensor],
-                                       outputs=[discriminator_output],
-                                       name='discriminator')
+    G = models.Model(inputs=[G_input], outputs=[G_output], name='generator')
+    D = models.Model(inputs=[D_input], outputs=[D_output], name='discriminator')
 
-    # 1. generator_model takes generator_input_tensor as input, returns a generated tensor
-    # 2. discriminator_model takes generated tensor as input, returns a tensor which is the combined output
-    # combined_output = discriminator_model(generator_model(generator_input_tensor))
-    combined_output = discriminator_model(layers.concatenate([generator_input_tensor, generator_model(generator_input_tensor)]))
-    combined_model = models.Model(inputs=[generator_input_tensor], outputs=[combined_output], name='combined')
+    # 1. G takes G_input as input, returns a generated tensor
+    # 2. D takes generated tensor as input, returns a tensor which is the combined output
+    # C_output = D(G(G_input))
+    C_G_output = G(G_input)
+    C_output = D(layers.concatenate([G_input, C_G_output]))
+    C = models.Model(inputs=[G_input], outputs=[C_output, C_G_output], name='combined')
 
-    return generator_model, discriminator_model, combined_model
+    return G, D, C
 
 def training_steps_GAN(model_components):
 
@@ -76,7 +75,6 @@ def training_steps_GAN(model_components):
 
     # Store average discrim prediction for generated and real samples every epoch.
     avg_gen_pred, avg_real_pred = [], []
-
 
     if not os.path.exists(output_dir + 'weights\\'):
         os.makedirs(output_dir + 'weights\\')
@@ -122,9 +120,11 @@ def training_steps_GAN(model_components):
         for j in range(k_g):
             batch = data_extract_1obj.get_batch(samples, batch_size)
             gen_input = batch[:, :10*4]  # Only keep first 10 bounding boxes for gen input (11th is the target)
+            gen_target = batch[:, -4:]  # Get last (target) bounding box
 
             ### TRAIN (y = 1) bc want pos feedback for tricking discrim (want discrim to output 1)
-            comb_results = combined_model.train_on_batch(gen_input, np.random.uniform(low=0.999, high=1.0, size=batch_size))    # 0.7, 1.2
+            comb_results = combined_model.train_on_batch(gen_input, {'discriminator': np.random.uniform(low=0.999, high=1.0, size=batch_size),
+                                                                     'generator': gen_target})
 
         G_loss.append(comb_results)
 
@@ -133,16 +133,17 @@ def training_steps_GAN(model_components):
             print('Step: {} of {}.'.format(i, starting_step + nb_steps))
             lossFile.write('Step: {} of {}.\n'.format(i, starting_step + nb_steps))
             K.set_learning_phase(0) # 0 = test
+            print('learning_rates: ', K.get_value(discriminator_model.optimizer.lr), ", ", K.get_value(combined_model.optimizer.lr))
 
             # half learning rate every 5 epochs
-            if not i % (log_interval*5): # UPDATE LEARNING RATE
+            # if not i % (log_interval*5): # UPDATE LEARNING RATE
                 # They all share an optimizer, so this decreases the lr for all models
-                K.set_value(generator_model.optimizer.lr, K.get_value(generator_model.optimizer.lr) / 2)
-                print('~~~~~~~~~~~~~~~DECREMENTING lr to: ', K.get_value(generator_model.optimizer.lr), ", ", K.get_value(discriminator_model.optimizer.lr))
+                # K.set_value(discriminator_model.optimizer.lr, K.get_value(discriminator_model.optimizer.lr) / 2)
+                # print('~~~~~~~~~~~~~~~DECREMENTING lr to: ', K.get_value(discriminator_model.optimizer.lr), ", ", K.get_value(combined_model.optimizer.lr))
 
 
             # LOSS SUMMARIES
-            print('lrs: '+ str(K.get_value(generator_model.optimizer.lr)) + ', ' + str(K.get_value(discriminator_model.optimizer.lr)) + ', ' + str(K.get_value(combined_model.optimizer.lr)))
+            print('lrs: '+ str(K.get_value(discriminator_model.optimizer.lr)) + ', ' + str(K.get_value(combined_model.optimizer.lr)))
 
             print('D_loss_gen: {}.\tD_loss_real: {}.'.format(D_loss_fake[-1], D_loss_real[-1]))
             lossFile.write('D_loss_gen: {}.\tD_loss_real: {}.\n'.format(D_loss_fake[-1], D_loss_real[-1]))
@@ -175,19 +176,21 @@ def get_model(data_cols, generator_model_path=None, discriminator_model_path=Non
 
     # Define network models.
     K.set_learning_phase(1)  # 1 = train
-    generator_model, discriminator_model, combined_model = define_models_GAN(gen_input_dim, discrim_input_dim, base_n_count)
+    G, D, C = define_models_GAN(gen_input_dim, discrim_input_dim, base_n_count)
 
-    adam = optimizers.Adam(lr=lr, beta_1=0.5, beta_2=0.9)
+    adam = optimizers.Adam(lr=lr, beta_1=0.5, beta_2=0.999, decay=0.0)
 
-    generator_model.compile(optimizer=adam, loss='binary_crossentropy')
-    discriminator_model.compile(optimizer=adam, loss='binary_crossentropy')
-    discriminator_model.trainable = False  # Freeze discriminator weights in combined model (we want to improve model by improving generator, rather than making the discriminator worse)
-    combined_model.compile(optimizer=adam, loss=combined_loss)
+    # G.compile(optimizer=adam, loss='binary_crossentropy')
+    D.compile(optimizer=adam, loss='binary_crossentropy')
+    print(D.summary())
+    D.trainable = False  # Freeze discriminator weights in combined model (we want to improve model by improving generator, rather than making the discriminator worse)
+    C.compile(optimizer=adam, loss={'discriminator': 'binary_crossentropy', 'generator': smoothL1}, 
+              loss_weights={'discriminator': 0.5, 'generator': 0.5})
 
     if show:
-        print(generator_model.summary())
-        print(discriminator_model.summary())
-        print(combined_model.summary())
+        print(G.summary())
+        print(D.summary())
+        print(C.summary())
 
     # LOAD WEIGHTS (and previous loss logs) IF PROVIDED
     # if loss_pickle_path:
@@ -195,12 +198,12 @@ def get_model(data_cols, generator_model_path=None, discriminator_model_path=Non
     #     [G_loss, D_loss_fake, D_loss_real, xgb_losses] = pickle.load(open(loss_pickle_path,'rb'))
     if generator_model_path:
         print('Loading generator model')
-        generator_model.load_weights(generator_model_path, by_name=True)
+        G.load_weights(generator_model_path, by_name=True)
     if discriminator_model_path:
         print('Loading discriminator model')
-        discriminator_model.load_weights(discriminator_model_path, by_name=True)
+        D.load_weights(discriminator_model_path, by_name=True)
 
-    return generator_model, discriminator_model, combined_model
+    return G, D, C
 
 # def test_model(generator_model, discriminator_model, combined_model, model_name):
 #   """Test model on a hand-picked sample from the data set."""

@@ -198,7 +198,6 @@ def get_batch(samples, batch_size, seed=0):
 
     indices = np.random.choice(len(samples), size=batch_size, replace=False)
     batch = samples[indices]
-    # print(batch)
 
     return np.reshape(batch, (batch_size, -1))
 
@@ -225,13 +224,13 @@ def unnormalize_sample(sample, sample_set):
     return sample
 
 if __name__ == '__main__':
-    samples, _ = get_kitti_data(normalize=True)
-    batch = get_batch(samples, 3, seed=7)
-    print(batch)
-    print(batch[:, :4*10])
-
     # samples, _ = get_kitti_data(normalize=True)
-    # print(samples)
-    # print("shape: ", samples.shape)
-    # print("ndim: ", samples.ndim)
-    # print("dtype: ", samples.dtype)
+    # batch = get_batch(samples, 3, seed=7)
+    # print(batch)
+    # print(batch[:, :4*10])
+
+    samples, _ = get_kitti_data(normalize=True)
+    print(samples)
+    print("shape: ", samples.shape)
+    print("ndim: ", samples.ndim)
+    print("dtype: ", samples.dtype)

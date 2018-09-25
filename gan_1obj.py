@@ -15,6 +15,8 @@ import data_extract_1obj
 
 
 def smoothL1(y_true, y_pred):
+    # y_true1 = tf.multiply(y_true, tf.convert_to_tensor([1240.0, 375.0, 1240.0, 375.0]))
+    # y_pred1 = tf.multiply(y_pred, tf.convert_to_tensor([1240.0, 375.0, 1240.0, 375.0]))
     tmp = tf.abs(y_pred - y_true)
     condition = tf.less(tmp, 1.)
     return tf.reduce_sum(tf.where(condition, tf.scalar_mul(0.5, tf.square(tmp)), tmp - 0.5), axis=-1)
@@ -23,23 +25,32 @@ def combined_loss(y_true, y_pred, a=0.5, b=0.5):
     return a*losses.binary_crossentropy(y_true, y_pred) + b*smoothL1(y_true, y_pred)
 
 def generator_network(x, discrim_input_dim, base_n_count):
-    x = layers.Dense(base_n_count)(x)
-    x = layers.LeakyReLU(0.1)(x)
-    x = layers.Dense(base_n_count*2)(x)
-    x = layers.LeakyReLU(0.1)(x)
-    x = layers.Dense(base_n_count*4)(x)
-    x = layers.LeakyReLU(0.1)(x)
-    x = layers.Dense(4)(x)
+    # x = layers.Dense(base_n_count)(x)
+    x = layers.Dense(64, activation="relu")(x)
+    # x = layers.LeakyReLU(0.1)(x)
+    # x = layers.Dense(base_n_count*2)(x)
+    x = layers.Dense(64, activation="relu")(x)
+    # x = layers.LeakyReLU(0.1)(x)
+    # x = layers.Dense(base_n_count*4)(x)
+    x = layers.Dense(64, activation="relu")(x)
+    # x = layers.LeakyReLU(0.1)(x)
+    x = layers.Dense(64, activation="relu")(x)
+    x = layers.Dense(64, activation="relu")(x)
+    x = layers.Dense(64, activation="relu")(x)
+    x = layers.Dense(4, activation="linear")(x)
     return x
 
 def discriminator_network(x, discrim_input_dim, base_n_count):
-    x = layers.Dense(base_n_count*4)(x)
-    x = layers.LeakyReLU(0.1)(x)
-    x = layers.Dense(base_n_count*2)(x)
-    x = layers.LeakyReLU(0.1)(x)
-    x = layers.Dense(base_n_count)(x)
-    x = layers.LeakyReLU(0.1)(x)
-    x = layers.Dense(1, activation='sigmoid')(x)
+    # x = layers.Dense(base_n_count*4)(x)
+    x = layers.Dense(32, activation="relu")(x)
+    # x = layers.LeakyReLU(0.1)(x)
+    # x = layers.Dense(base_n_count*2)(x)
+    x = layers.Dense(32, activation="relu")(x)
+    # x = layers.LeakyReLU(0.1)(x)
+    # x = layers.Dense(base_n_count)(x)
+    x = layers.Dense(32, activation="relu")(x)
+    # x = layers.LeakyReLU(0.1)(x)
+    x = layers.Dense(1, activation="sigmoid")(x)
     return x
 
 def define_models_GAN(gen_input_dim, discrim_input_dim, base_n_count, type=None):
@@ -70,7 +81,7 @@ def training_steps_GAN(model_components):
                         nb_steps, batch_size, k_d, k_g,
                         log_interval, show, output_dir] = model_components
 
-    samples, _ = data_extract_1obj.get_kitti_data(normalize=True)
+    samples, _ = data_extract_1obj.get_kitti_data()
     G_loss, D_loss_fake, D_loss_real, D_loss = [], [], [], []
 
     # Store average discrim prediction for generated and real samples every epoch.
@@ -79,6 +90,11 @@ def training_steps_GAN(model_components):
     if not os.path.exists(output_dir + 'weights\\'):
         os.makedirs(output_dir + 'weights\\')
     lossFile = open(output_dir + 'losses.txt', 'w')
+
+    with open(output_dir+"D_model.json", "w") as f:
+        f.write(discriminator_model.to_json(indent=4))
+    with open(output_dir+"G_model.json", "w") as f:
+        f.write(generator_model.to_json(indent=4))
 
     for i in range(1, nb_steps+1):
         K.set_learning_phase(1)  # 1 = train
@@ -90,18 +106,20 @@ def training_steps_GAN(model_components):
         for j in range(k_d):
             batch = data_extract_1obj.get_batch(samples, batch_size)
             gen_input = batch[:, :10*4]  # Only keep first 10 bounding boxes for gen input (11th is the target)
-            # if i == 1 and j == 0:
-            #   print("gen_input training shape: ", gen_input.shape)
-            #   print(gen_input[0])
 
             g_z = generator_model.predict(gen_input)
-            # if i == 1 and j == 0:
-            #   print("g_z.shape: ", g_z.shape)
-            #   print(g_z[0])
+            # print("g_z.shape", g_z.shape)
+            # print(g_z[0])
             g_z = np.concatenate((gen_input, g_z), axis=1)
-            # if i == 1 and j == 0:
-            #   print("new g_z.shape: ", g_z.shape)
-            #   print(g_z[0])
+            # print("g_concat.shape", g_z.shape)
+            # print(g_z[0])
+
+            # for i in range(len(batch)):
+            #     for x in batch[i][-4:]:
+            #         if x > 1:
+            #             print("g_z:", g_z[i][-4:])
+            #             print("target:", batch[i][-4:])
+            #             break
 
             ### TRAIN ON REAL (y = 1) w/ noise
             disc_real_results = discriminator_model.train_on_batch(batch, np.random.uniform(low=0.999, high=1.0, size=batch_size))      # 0.7, 1.2 GANs need noise to prevent loss going to zero
@@ -121,6 +139,9 @@ def training_steps_GAN(model_components):
             batch = data_extract_1obj.get_batch(samples, batch_size)
             gen_input = batch[:, :10*4]  # Only keep first 10 bounding boxes for gen input (11th is the target)
             gen_target = batch[:, -4:]  # Get last (target) bounding box
+
+            # for v in gen_target:
+            #     data_extract_1obj.unnormalize_sample(v)
 
             ### TRAIN (y = 1) bc want pos feedback for tricking discrim (want discrim to output 1)
             comb_results = combined_model.train_on_batch(gen_input, {'discriminator': np.random.uniform(low=0.999, high=1.0, size=batch_size),
@@ -171,21 +192,21 @@ def get_model(data_cols, generator_model_path=None, discriminator_model_path=Non
     base_n_count = 128
     show = True
 
-    np.random.seed(seed)
+    # np.random.seed(seed)
     discrim_input_dim = len(data_cols)
 
     # Define network models.
     K.set_learning_phase(1)  # 1 = train
     G, D, C = define_models_GAN(gen_input_dim, discrim_input_dim, base_n_count)
 
-    adam = optimizers.Adam(lr=lr, beta_1=0.5, beta_2=0.999, decay=0.0)
+    adam = optimizers.Adam(lr=lr, beta_1=0.5, beta_2=0.999)
 
     # G.compile(optimizer=adam, loss='binary_crossentropy')
     D.compile(optimizer=adam, loss='binary_crossentropy')
     print(D.summary())
     D.trainable = False  # Freeze discriminator weights in combined model (we want to improve model by improving generator, rather than making the discriminator worse)
     C.compile(optimizer=adam, loss={'discriminator': 'binary_crossentropy', 'generator': smoothL1}, 
-              loss_weights={'discriminator': 0.5, 'generator': 0.5})
+              loss_weights={'discriminator': 0.0, 'generator': 1.0})
 
     if show:
         print(G.summary())

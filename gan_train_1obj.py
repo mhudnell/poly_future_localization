@@ -1,6 +1,8 @@
 import gan_1obj
 import numpy as np
 import matplotlib.pyplot as plt
+import pickle
+import os
 
 data_cols = []
 for fNum in range(1,12):
@@ -8,6 +10,8 @@ for fNum in range(1,12):
         data_cols.append(char + str(fNum))
 
 print("data_cols: ", data_cols)
+
+# def train_new_model(lr, batch_size, k_d, k_g, ):
 
 ## TRAINING ##
 # CREATE NEW MODEL
@@ -19,14 +23,15 @@ print("metrics_names:", combined_model.metrics_names)
 label_cols = []
 label_dim = 0
 log_interval = 1  # ~1 epoch (35082 / 32 =~ 1096, 128: 274, 35082: 1)  # interval (in steps) at which to log loss summaries and save plots of image samples to disc
-epochs = 15
+epochs = 3
 nb_steps = log_interval*epochs  # 50000 # Add one for logging of the last interval
 batch_size = 35082  # 128, 64
-k_d = 5  # 1 number of discriminator network updates per adversarial training step
+k_d = 1  # 1 number of discriminator network updates per adversarial training step
 k_g = 1  # 1 number of generator network updates per adversarial training step
 
 starting_step = 0
-model_name = 'maxGAN_0.5_0.999test_bs{}_lr{}expDecay5_kd{}_kg{}_steps{}'.format(batch_size, lr, k_d, k_g, nb_steps)
+# model_name = 'maxGAN_6_layer44G_RELU_0.0adv_bs{}_lr{}expDecay5_kd{}_kg{}_steps{}'.format(batch_size, lr, k_d, k_g, nb_steps)
+model_name = 'maxGAN_logloss_bs{}_lr{}expDecay5_kd{}_kg{}_steps{}'.format(batch_size, lr, k_d, k_g, nb_steps)
 output_dir = 'C:\\Users\\Max\\Research\\maxGAN\\models\\'+model_name+'\\'
 show = True
 
@@ -37,6 +42,26 @@ model_components = [model_name, starting_step,
                     log_interval, show, output_dir]
 
 [G_loss, D_loss_fake, D_loss_real, D_loss, avg_gen_pred, avg_real_pred] = gan_1obj.training_steps_GAN(model_components)
+
+losses = [G_loss, D_loss_fake, D_loss_real, D_loss, avg_gen_pred, avg_real_pred]
+
+# Make loss dir
+if not os.path.exists(output_dir + 'losses\\'):
+    os.makedirs(output_dir + 'losses\\')
+
+# Save losses
+with open(output_dir+'losses\\G_loss.pkl', 'wb') as f:
+    pickle.dump(G_loss, f)
+with open(output_dir+'losses\\D_loss_fake.pkl', 'wb') as f:
+    pickle.dump(D_loss_fake, f)
+with open(output_dir+'losses\\D_loss_real.pkl', 'wb') as f:
+    pickle.dump(D_loss_real, f)
+with open(output_dir+'losses\\D_loss.pkl', 'wb') as f:
+    pickle.dump(D_loss, f)
+with open(output_dir+'losses\\avg_gen_pred.pkl', 'wb') as f:
+    pickle.dump(avg_gen_pred, f)
+with open(output_dir+'losses\\avg_real_pred.pkl', 'wb') as f:
+    pickle.dump(avg_real_pred, f)
 
 # PLOT LOSS
 x = np.arange(nb_steps)
@@ -72,3 +97,6 @@ plt.xlabel('epoch', fontsize=18)
 plt.ylabel('avg prediction', fontsize=16)
 
 plt.savefig(output_dir + 'discrim_prediction_plot.png')
+
+# if __name__ == '__main__':
+    

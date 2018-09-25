@@ -7,6 +7,7 @@
 import numpy as np
 import os
 from collections import deque
+from math import log, exp
 
 set_dimensions = {
         '0000': (375, 1242, 3),
@@ -133,13 +134,13 @@ def generateDataFiles_1obj(fpath):
                 obj_bb_dict[obj_id] = deque([bb]) # create a new queue for this obj_id
                 obj_lastFrame_dict[obj_id] = int(frame_num)
 
-def get_kitti_data(normalize=False):
+def get_kitti_data(normalize=True, transform=True):
     """
     Parse kitti label files and construct a set of samples. Each sample has 11 'bounding boxes', where each
     bounding box stores 4 floats (left, top, width, height). The 11th bounding box is the 'target'
 
     Returns:
-        ndarray (ndim: 3):
+        samples (ndarray (ndim: 3)):
     """
     samples = []
     samples_info = []  # (sample set, frame number)
@@ -174,7 +175,11 @@ def get_kitti_data(normalize=False):
                                 sample = []
                                 for i in range(10):
                                     sample.append(object_queue[i])
-                                sample.append(object_queue[14])  # Append the target box
+                                if transform:
+                                    target = get_transformation(object_queue[9], object_queue[14])
+                                else:
+                                    target = object_queue[14]
+                                sample.append(target)  # Append the target box (or transformation)
                                 samples.append(sample)
                                 samples_info.append((sample_set_name, str(frame_number).zfill(6), object_id))
 
@@ -194,6 +199,7 @@ def get_batch(samples, batch_size, seed=0):
     """
 
     if seed:  # For Testing
+        print("Getting seeded batch")
         np.random.seed(seed)
 
     indices = np.random.choice(len(samples), size=batch_size, replace=False)
@@ -202,7 +208,7 @@ def get_batch(samples, batch_size, seed=0):
     return np.reshape(batch, (batch_size, -1))
 
 def normalize_bb(bb, sample_set):
-    '''Normalizes the sample passed in. Since python is pass-by-object, the return value is actually unnecessary.'''
+    """Normalizes the sample passed in. Since python is pass-by-object, the return value is actually unnecessary."""
     dimensions = set_dimensions[sample_set]
     h = dimensions[0]
     w = dimensions[1]
@@ -213,7 +219,7 @@ def normalize_bb(bb, sample_set):
     return bb
 
 def unnormalize_sample(sample, sample_set):
-    '''Unnormalizes the sample passed in. Since python is pass-by-object, the return value is actually unnecessary.'''
+    """Unnormalizes the sample passed in. Since python is pass-by-object, the return value is actually unnecessary."""
     dimensions = set_dimensions[sample_set]
     h = dimensions[0]
     w = dimensions[1]
@@ -222,6 +228,25 @@ def unnormalize_sample(sample, sample_set):
     sample[:, 2] = sample[:, 2] * w
     sample[:, 3] = sample[:, 3] * h
     return sample
+
+
+def get_transformation(anchor, target):
+    """Calculate the transformation (t), which goes from the anchor box, to the target box."""
+    t = np.empty(4)
+    t[0] = (target[0] - anchor[0]) / anchor[2]
+    t[1] = (target[1] - anchor[1]) / anchor[3]
+    t[2] = log(target[2] / anchor[2])
+    t[3] = log(target[3] / anchor[3])
+    return t
+
+def transform(anchor, t):
+    """Apply transformation t to anchor box to get a proposal box."""
+    proposal = np.empty(4)
+    proposal[0] = anchor[2]*t[0] + anchor[0]
+    proposal[1] = anchor[3]*t[1] + anchor[1]
+    proposal[2] = anchor[2]*exp(t[2])
+    proposal[3] = anchor[3]*exp(t[3])
+    return proposal
 
 if __name__ == '__main__':
     # samples, _ = get_kitti_data(normalize=True)

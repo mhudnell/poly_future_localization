@@ -1,6 +1,6 @@
 import cv2
 import numpy as np
-
+import data_extract_1obj
 
 def drawFrameRects(sample_set, frame, objId, bb, isGen, folder_dir):
     '''
@@ -19,6 +19,13 @@ def drawFrameRects(sample_set, frame, objId, bb, isGen, folder_dir):
     # Load img to draw on.
     img = cv2.imread(img_file)
 
+    # 
+    proposal = data_extract_1obj.transform(bb[-2], bb[-1])
+    bb[-1] = proposal
+
+    data_extract_1obj.unnormalize_sample(bb, sample_set)
+    print(proposal)
+
     # Convert bb (LTWH values) to ints.
     bb_int = np.zeros((len(bb), 4), dtype='int32')
     for i in range(len(bb_int)):
@@ -27,6 +34,11 @@ def drawFrameRects(sample_set, frame, objId, bb, isGen, folder_dir):
         bb_int[i][1] = int(float(nums[1]))
         bb_int[i][2] = int(float(nums[2]))
         bb_int[i][3] = int(float(nums[3]))
+
+    # bb_int[-1][0] = proposal[0]
+    # bb_int[-1][1] = proposal[1]
+    # bb_int[-1][2] = proposal[2]
+    # bb_int[-1][3] = proposal[3]
 
     # Draw target box in green if ground truth, blue if generated (color is specified in (b,g,r) format)
     target_color = (255, 0, 0) if isGen else (0, 255, 0)

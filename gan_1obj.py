@@ -283,10 +283,14 @@ def test_model_multiple(generator_model, discriminator_model, combined_model, mo
         d_pred_real = discriminator_model.predict(target_vector)
         d_pred_gen = discriminator_model.predict(gen_out)
         print("d_pred_real:", d_pred_real, "d_pred_gen:", d_pred_gen)
+        print("generated:", generated[-1])
+        print("target:", target[-1])
+        # with tf.Session() as sess:
+        #     print("smoothL1 loss:", sess.run(smoothL1(target[-1], generated[-1])), "\n")
 
         # Undo normalization.
-        data_extract_1obj.unnormalize_sample(generated, sample_set)
-        data_extract_1obj.unnormalize_sample(target, sample_set)
+        # data_extract_1obj.unnormalize_sample(generated, sample_set)
+        # data_extract_1obj.unnormalize_sample(target, sample_set)
 
         # Draw Results.
         drawFrameRects(sample_set, frame, object_id, generated, isGen=True, folder_dir=data_dir)

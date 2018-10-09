@@ -10,7 +10,7 @@ import tensorflow as tf
 import os
 import re
 
-from vis_tool import drawFrameRects
+from vis_tool import drawFrameRects, get_IoU
 import data_extract_1obj
 
 
@@ -79,7 +79,7 @@ def training_steps_GAN(model_components):
                         label_cols, label_dim,
                         generator_model, discriminator_model, combined_model,
                         nb_steps, batch_size, k_d, k_g,
-                        log_interval, show, output_dir] = model_components
+                        steps_per_epoch, show, output_dir] = model_components
 
     samples, _ = data_extract_1obj.get_kitti_data()
     G_loss, D_loss_fake, D_loss_real, D_loss = [], [], [], []
@@ -91,6 +91,7 @@ def training_steps_GAN(model_components):
         os.makedirs(output_dir + 'weights\\')
     lossFile = open(output_dir + 'losses.txt', 'w')
 
+    # Log model structure to json
     with open(output_dir+"D_model.json", "w") as f:
         f.write(discriminator_model.to_json(indent=4))
     with open(output_dir+"G_model.json", "w") as f:
@@ -98,12 +99,10 @@ def training_steps_GAN(model_components):
 
     for i in range(1, nb_steps+1):
         K.set_learning_phase(1)  # 1 = train
+        # epoch = data_extract_1obj.get_epoch(samples, batch_size)
 
         # TRAIN DISCRIMINATOR on real and generated images
-        #
-        # k_d [1]: num of discriminator model updates per training step
-        # batch_size [32]: the number of samples trained on during each step (if == len(data_x) then equivalent to 1 epoch?)
-        for j in range(k_d):
+        for _ in range(k_d):
             batch = data_extract_1obj.get_batch(samples, batch_size)
             gen_input = batch[:, :10*4]  # Only keep first 10 bounding boxes for gen input (11th is the target)
 
@@ -133,9 +132,7 @@ def training_steps_GAN(model_components):
         D_loss.append(d_l)
 
         # TRAIN GENERATOR on real inputs and outputs
-        #
-        # k_g [1]: num of generator model updates per training step
-        for j in range(k_g):
+        for _ in range(k_g):
             batch = data_extract_1obj.get_batch(samples, batch_size)
             gen_input = batch[:, :10*4]  # Only keep first 10 bounding boxes for gen input (11th is the target)
             gen_target = batch[:, -4:]  # Get last (target) bounding box
@@ -149,41 +146,40 @@ def training_steps_GAN(model_components):
 
         G_loss.append(comb_results)
 
-        # SAVE WEIGHTS / PLOT IMAGES
-        if not i % log_interval:
-            print('Step: {} of {}.'.format(i, starting_step + nb_steps))
-            lossFile.write('Step: {} of {}.\n'.format(i, starting_step + nb_steps))
+        # Save weights / Log loss every epoch
+        if not i % steps_per_epoch:
             K.set_learning_phase(0) # 0 = test
-            print('learning_rates: ', K.get_value(discriminator_model.optimizer.lr), ", ", K.get_value(combined_model.optimizer.lr))
+            epoch = i // steps_per_epoch
+            # print('learning_rates: ', K.get_value(discriminator_model.optimizer.lr), ", ", K.get_value(combined_model.optimizer.lr))
 
             # half learning rate every 5 epochs
-            # if not i % (log_interval*5): # UPDATE LEARNING RATE
+            # if not i % (steps_per_epoch*5): # UPDATE LEARNING RATE
                 # They all share an optimizer, so this decreases the lr for all models
                 # K.set_value(discriminator_model.optimizer.lr, K.get_value(discriminator_model.optimizer.lr) / 2)
                 # print('~~~~~~~~~~~~~~~DECREMENTING lr to: ', K.get_value(discriminator_model.optimizer.lr), ", ", K.get_value(combined_model.optimizer.lr))
-
-
-            # LOSS SUMMARIES
-            print('lrs: '+ str(K.get_value(discriminator_model.optimizer.lr)) + ', ' + str(K.get_value(combined_model.optimizer.lr)))
-
-            print('D_loss_gen: {}.\tD_loss_real: {}.'.format(D_loss_fake[-1], D_loss_real[-1]))
-            lossFile.write('D_loss_gen: {}.\tD_loss_real: {}.\n'.format(D_loss_fake[-1], D_loss_real[-1]))
-
-            print('G_loss: {}.\t\tD_loss: {}.'.format(G_loss[-1], D_loss[-1]))
-            lossFile.write('G_loss: {}.\t\t\tD_loss: {}.\n'.format(G_loss[-1], D_loss[-1]))
-
-            # if starting_step+nb_steps - i < log_interval*4:
+            
             a_g_p, a_r_p = test_discrim(generator_model, discriminator_model, combined_model)
-            print('avg_gen_pred: {}.\tavg_real_pred: {}.\n'.format(a_g_p, a_r_p))
-            lossFile.write('avg_gen_pred: {}.\tavg_real_pred: {}.\n\n'.format(a_g_p, a_r_p))
-
             avg_gen_pred.append(a_g_p)
             avg_real_pred.append(a_r_p)
 
-            # SAVE MODEL CHECKPOINTS
-            model_checkpoint_base_name = output_dir + 'weights\\{}_weights_step_{}.h5'
-            generator_model.save_weights(model_checkpoint_base_name.format('gen', i))
-            discriminator_model.save_weights(model_checkpoint_base_name.format('discrim', i))
+            print('Epoch: {} of {}'.format(epoch, nb_steps // steps_per_epoch))
+            print('D_loss_fake: {}'.format(D_loss_fake[-1]))
+            print('D_loss_real: {}'.format(D_loss_real[-1]))
+            print('D_loss: {}'.format(D_loss[-1]))
+            print('G_loss: {}'.format(G_loss[-1]))
+            print('avg_gen_pred: {} | avg_real_pred: {} |\n'.format(a_g_p, a_r_p))
+
+            lossFile.write('Epoch: {} of {}.\n'.format(epoch, nb_steps // steps_per_epoch))
+            lossFile.write('D_loss_fake: {}'.format(D_loss_fake[-1]))
+            lossFile.write('D_loss_real: {}'.format(D_loss_real[-1]))
+            lossFile.write('D_loss: {}'.format(D_loss[-1]))
+            lossFile.write('G_loss: {}'.format(G_loss[-1]))
+            lossFile.write('avg_gen_pred: {} | avg_real_pred: {} |\n'.format(a_g_p, a_r_p))
+
+            # Checkpoint: Save model weights
+            model_checkpoint_base_name = output_dir + 'weights\\{}_weights_echo_{}.h5'
+            generator_model.save_weights(model_checkpoint_base_name.format('gen', epoch))
+            discriminator_model.save_weights(model_checkpoint_base_name.format('discrim', epoch))
 
     return [G_loss, D_loss_fake, D_loss_real, D_loss, avg_gen_pred, avg_real_pred]
 
@@ -206,7 +202,7 @@ def get_model(data_cols, generator_model_path=None, discriminator_model_path=Non
     print(D.summary())
     D.trainable = False  # Freeze discriminator weights in combined model (we want to improve model by improving generator, rather than making the discriminator worse)
     C.compile(optimizer=adam, loss={'discriminator': 'binary_crossentropy', 'generator': smoothL1}, 
-              loss_weights={'discriminator': 0.0, 'generator': 1.0})
+              loss_weights={'discriminator': 0.5, 'generator': 0.5})
 
     if show:
         print(G.summary())
@@ -304,8 +300,9 @@ def test_model_multiple(generator_model, discriminator_model, combined_model, mo
         d_pred_real = discriminator_model.predict(target_vector)
         d_pred_gen = discriminator_model.predict(gen_out)
         print("d_pred_real:", d_pred_real, "d_pred_gen:", d_pred_gen)
-        print("generated:", generated[-1])
-        print("target:", target[-1])
+        print("generated_transform:", generated[-1])
+        print("target_transform:", target[-1])
+        print("iou:", get_IoU(target[-2], target[-1], generated[-1], sample_set))
         # with tf.Session() as sess:
         #     print("smoothL1 loss:", sess.run(smoothL1(target[-1], generated[-1])), "\n")
 
@@ -318,6 +315,27 @@ def test_model_multiple(generator_model, discriminator_model, combined_model, mo
         drawFrameRects(sample_set, frame, object_id, target, isGen=False, folder_dir=data_dir)
 
     return
+
+def test_model_IOU(generator_model, discriminator_model, combined_model, model_name):
+    samples, samples_info = data_extract_1obj.get_kitti_data(normalize=True)
+    print(samples.shape)
+    vectors = samples.reshape((len(samples), -1))
+    print(vectors.shape)
+    ious = np.empty(len(vectors))
+    # gen_input = vectors[:10*4]
+    for i, sample in enumerate(vectors):
+        sample_set = samples_info[i][0]
+
+        gen_input = sample[:10*4]
+        # print(gen_input.shape)
+        g_z = generator_model.predict(gen_input.reshape((1, -1)))
+
+        # print(samples[i][-1].shape, g_z.shape)
+        ious[i] = get_IoU(samples[i][-2], samples[i][-1], g_z[0], sample_set)
+
+    print("avg IOU:", np.mean(ious))
+    return
+
 
 def test_discrim(generator_model, discriminator_model, combined_model):
     """Test the discriminator by having it produce a realness score for generated and target images in a sample set."""

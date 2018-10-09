@@ -8,10 +8,11 @@ for fNum in range(1,12):
 print(data_cols)
 
 # LOAD MODEL
-model_name = 'maxGAN_0.5_0.999_bs35082_lr0.0002expDecay5_kd5_kg1_steps15'
-step = '15'
+model_name = 'maxGAN_centered_G6-64_D3-32_0.5adv_bs128_lr0.0002_kd1_kg1_epochs50'
+step = '13700'
 generator_model, discriminator_model, combined_model = gan_1obj.get_model(data_cols, generator_model_path = 'C:\\Users\\Max\\Research\\maxGAN\\models\\'+model_name+'\\weights\\gen_weights_step_'+step+'.h5',
                                                                           discriminator_model_path = 'C:\\Users\\Max\\Research\\maxGAN\\models\\'+model_name+'\\weights\\discrim_weights_step_'+step+'.h5')
 
 # gan_1obj.test_model(generator_model, discriminator_model, combined_model, model_name)
 gan_1obj.test_model_multiple(generator_model, discriminator_model, combined_model, model_name)
+gan_1obj.test_model_IOU(generator_model, discriminator_model, combined_model, model_name)

@@ -22,16 +22,17 @@ print("metrics_names:", combined_model.metrics_names)
 # DEFINE TRAINING PARAMS
 label_cols = []
 label_dim = 0
-log_interval = 1  # ~1 epoch (35082 / 32 =~ 1096, 128: 274, 35082: 1)  # interval (in steps) at which to log loss summaries and save plots of image samples to disc
-epochs = 3
-nb_steps = log_interval*epochs  # 50000 # Add one for logging of the last interval
-batch_size = 35082  # 128, 64
+batch_size = 128  # 128, 64
+steps_per_epoch = 35082 // batch_size  # ~1 epoch (35082 / 32 =~ 1096, 128: 274, 35082: 1)  # interval (in steps) at which to log loss summaries and save plots of image samples to disc
+epochs = 50
+nb_steps = steps_per_epoch*epochs  # 50000 # Add one for logging of the last interval
+
 k_d = 1  # 1 number of discriminator network updates per adversarial training step
 k_g = 1  # 1 number of generator network updates per adversarial training step
 
 starting_step = 0
-# model_name = 'maxGAN_6_layer44G_RELU_0.0adv_bs{}_lr{}expDecay5_kd{}_kg{}_steps{}'.format(batch_size, lr, k_d, k_g, nb_steps)
-model_name = 'maxGAN_logloss_bs{}_lr{}expDecay5_kd{}_kg{}_steps{}'.format(batch_size, lr, k_d, k_g, nb_steps)
+model_name = 'maxGAN_centered_G6-64_D3-32_0.5adv_bs{}_lr{}_kd{}_kg{}_epochs{}'.format(batch_size, lr, k_d, k_g, epochs)
+# model_name = 'maxGAN_logloss_bs{}_lr{}expDecay5_kd{}_kg{}_steps{}'.format(batch_size, lr, k_d, k_g, epochss)
 output_dir = 'C:\\Users\\Max\\Research\\maxGAN\\models\\'+model_name+'\\'
 show = True
 
@@ -39,7 +40,7 @@ model_components = [model_name, starting_step,
                     data_cols, label_cols, label_dim,
                     generator_model, discriminator_model, combined_model,
                     nb_steps, batch_size, k_d, k_g,
-                    log_interval, show, output_dir]
+                    steps_per_epoch, show, output_dir]
 
 [G_loss, D_loss_fake, D_loss_real, D_loss, avg_gen_pred, avg_real_pred] = gan_1obj.training_steps_GAN(model_components)
 

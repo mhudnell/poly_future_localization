@@ -33,106 +33,106 @@ set_dimensions = {
         '0020': (376, 1241, 3),
 }
 
-def getLineCounts_1obj():
-    """Check that all 'past' data files have 10 lines, and 'future' data files have 11 lines."""
-    total_past_count = 0
-    badpast_count = 0
-    for subdir, _, files in os.walk('F:\\Car data\\label_02_extracted\\past_1obj_LTWH'):
-        for file in files:
-            filename = os.path.join(subdir, file)
+# def getLineCounts_1obj():
+#     """Check that all 'past' data files have 10 lines, and 'future' data files have 11 lines."""
+#     total_past_count = 0
+#     badpast_count = 0
+#     for subdir, _, files in os.walk('F:\\Car data\\label_02_extracted\\past_1obj_LTWH'):
+#         for file in files:
+#             filename = os.path.join(subdir, file)
 
-            with open(filename) as f:
-                for i, _ in enumerate(f):
-                    pass
-            # print(str(i + 1), end='')
-            if i + 1 != 10:
-                print(str(i + 1) + " : " + filename)
-                badpast_count += 1
+#             with open(filename) as f:
+#                 for i, _ in enumerate(f):
+#                     pass
+#             # print(str(i + 1), end='')
+#             if i + 1 != 10:
+#                 print(str(i + 1) + " : " + filename)
+#                 badpast_count += 1
 
-            total_past_count += 1
-    if badpast_count == 0:
-        print("All {} past files are of correct length".format(total_past_count))
+#             total_past_count += 1
+#     if badpast_count == 0:
+#         print("All {} past files are of correct length".format(total_past_count))
 
-    total_future_count = 0
-    badfuture_count = 0
-    for subdir, _, files in os.walk('F:\\Car data\\label_02_extracted\\future_1obj_LTWH'):
-        for file in files:
-            filename = os.path.join(subdir, file)
+#     total_future_count = 0
+#     badfuture_count = 0
+#     for subdir, _, files in os.walk('F:\\Car data\\label_02_extracted\\future_1obj_LTWH'):
+#         for file in files:
+#             filename = os.path.join(subdir, file)
 
-            with open(filename) as f:
-                for i, _ in enumerate(f):
-                    pass
-            # print(str(i + 1), end='')
-            if i + 1 != 11:
-                print(str(i + 1) + " : " + filename)
-                badfuture_count += 1
+#             with open(filename) as f:
+#                 for i, _ in enumerate(f):
+#                     pass
+#             # print(str(i + 1), end='')
+#             if i + 1 != 11:
+#                 print(str(i + 1) + " : " + filename)
+#                 badfuture_count += 1
 
-            total_future_count += 1
-    if badfuture_count == 0:
-        print("All {} future files are of correct length".format(total_future_count))
+#             total_future_count += 1
+#     if badfuture_count == 0:
+#         print("All {} future files are of correct length".format(total_future_count))
 
 
-def generateDataFiles_1obj(fpath):
-    """
-    Read each kitti data file; identify objects with 15-frame sequences and create 'past' samples using the first 10 frames,
-    and create 'future' samples using the first 10 frames and the 15th (target) frame. Write each 'past' and 'future' sample to its own file.
-    """
-    f = open(fpath,'r')
-    fname = os.path.splitext(fpath)[0]
+# def generateDataFiles_1obj(fpath):
+#     """
+#     Read each kitti data file; identify objects with 15-frame sequences and create 'past' samples using the first 10 frames,
+#     and create 'future' samples using the first 10 frames and the 15th (target) frame. Write each 'past' and 'future' sample to its own file.
+#     """
+#     f = open(fpath,'r')
+#     fname = os.path.splitext(fpath)[0]
 
-    path_past = 'F:\\Car data\\label_02_extracted\\past_1obj_LTWH\\' + fname
-    path_future = 'F:\\Car data\\label_02_extracted\\future_1obj_LTWH\\' + fname
+#     path_past = 'F:\\Car data\\label_02_extracted\\past_1obj_LTWH\\' + fname
+#     path_future = 'F:\\Car data\\label_02_extracted\\future_1obj_LTWH\\' + fname
 
-    if not os.path.exists(path_past):
-        os.makedirs(path_past)
-    if not os.path.exists(path_future):
-        os.makedirs(path_future)
+#     if not os.path.exists(path_past):
+#         os.makedirs(path_past)
+#     if not os.path.exists(path_future):
+#         os.makedirs(path_future)
 
-    data_num = 0
-    obj_bb_dict = {}
-    obj_lastFrame_dict = {}
+#     data_num = 0
+#     obj_bb_dict = {}
+#     obj_lastFrame_dict = {}
 
-    while True:
-        line = f.readline()
-        if not line:
-            f.close()
-            return data_num
+#     while True:
+#         line = f.readline()
+#         if not line:
+#             f.close()
+#             return data_num
 
-        words = line.split()
-        frame_num = words[0]
-        obj_id = words[1]
+#         words = line.split()
+#         frame_num = words[0]
+#         obj_id = words[1]
 
-        if words[2] != "DontCare":
-            L = float(words[6])
-            T = float(words[7])
-            R = float(words[8])
-            B = float(words[9])
-            bb = [str(L), str(T), str(R - L), str(B - T)]
+#         if words[2] != "DontCare":
+#             L = float(words[6])
+#             T = float(words[7])
+#             R = float(words[8])
+#             B = float(words[9])
+#             bb = [str(L), str(T), str(R - L), str(B - T)]
 
-            if obj_id in obj_bb_dict and obj_lastFrame_dict[obj_id] == int(frame_num) - 1:
-                obj_queue = obj_bb_dict[obj_id]
-                #if len(obj_queue) > 1: print(len(obj_queue))
-                if len(obj_queue) >= 15:
-                    obj_queue.popleft()
+#             if obj_id in obj_bb_dict and obj_lastFrame_dict[obj_id] == int(frame_num) - 1:
+#                 obj_queue = obj_bb_dict[obj_id]
+#                 #if len(obj_queue) > 1: print(len(obj_queue))
+#                 if len(obj_queue) >= 15:
+#                     obj_queue.popleft()
 
-                obj_queue.append(bb)
-                obj_lastFrame_dict[obj_id] = int(frame_num)
+#                 obj_queue.append(bb)
+#                 obj_lastFrame_dict[obj_id] = int(frame_num)
 
-                if len(obj_queue) == 15:
-                    fpast = open(path_past + '\\past' + str(data_num) +'_objId'+obj_id+'_frameNum'+frame_num+'.txt', 'w')
-                    ffuture = open(path_future + '\\future' + str(data_num) +'_objId'+obj_id+'_frameNum'+frame_num+'.txt', 'w')
+#                 if len(obj_queue) == 15:
+#                     fpast = open(path_past + '\\past' + str(data_num) +'_objId'+obj_id+'_frameNum'+frame_num+'.txt', 'w')
+#                     ffuture = open(path_future + '\\future' + str(data_num) +'_objId'+obj_id+'_frameNum'+frame_num+'.txt', 'w')
 
-                    for i in range(10):
-                        fpast.write(" ".join(obj_queue[i]) + "\n")
-                        ffuture.write(" ".join(obj_queue[i]) + "\n")  # include past data along with future position
-                    ffuture.write(" ".join(obj_queue[14]) + "\n")
+#                     for i in range(10):
+#                         fpast.write(" ".join(obj_queue[i]) + "\n")
+#                         ffuture.write(" ".join(obj_queue[i]) + "\n")  # include past data along with future position
+#                     ffuture.write(" ".join(obj_queue[14]) + "\n")
 
-                    fpast.close()
-                    ffuture.close()
-                    data_num += 1
-            else:
-                obj_bb_dict[obj_id] = deque([bb]) # create a new queue for this obj_id
-                obj_lastFrame_dict[obj_id] = int(frame_num)
+#                     fpast.close()
+#                     ffuture.close()
+#                     data_num += 1
+#             else:
+#                 obj_bb_dict[obj_id] = deque([bb]) # create a new queue for this obj_id
+#                 obj_lastFrame_dict[obj_id] = int(frame_num)
 
 def get_kitti_data(normalize=True, transform=True):
     """
@@ -163,7 +163,10 @@ def get_kitti_data(normalize=True, transform=True):
                         T = float(words[7])
                         R = float(words[8])
                         B = float(words[9])
-                        bb = normalize_bb([L, T, R - L, B - T], sample_set_name) if normalize else [L, T, R - L, B - T]
+                        cx = (L + R)/2
+                        cy = (T + B)/2
+                        # bb = normalize_bb([L, T, R - L, B - T], sample_set_name) if normalize else [L, T, R - L, B - T]
+                        bb = normalize_bb([cx, cy, R - L, B - T], sample_set_name) if normalize else [cx, cy, R - L, B - T]
 
                         if object_id in object_last_seen and object_last_seen[object_id] == frame_number - 1:  # Object has been seen previously AND the object was seen in the previous frame
                             object_queue = object_queues[object_id]
@@ -189,6 +192,32 @@ def get_kitti_data(normalize=True, transform=True):
                     object_last_seen[object_id] = frame_number  # Update last seen frame for this object
 
         return np.asarray(samples), samples_info
+
+def get_epoch(samples, batch_size, seed=0):
+    """
+    Retrieve n batches of size batch_size, where n is the number of batches needed to fit an entire epoch.
+    Leaves out some samples if `samples` is not divisible by `batch_size`
+
+    Returns a list of lists, where each internal list is a batch
+    """
+    if seed:  # For Testing
+        print("Getting seeded epoch")
+        np.random.seed(seed)
+
+    num_samples = len(samples)
+    num_batches = num_samples // batch_size
+    indices = np.random.choice(num_samples, size=(num_batches, batch_size), replace=False)
+
+    # print("samples:", samples.shape)
+    # print(samples[num_samples//2])
+    vectorized_samples = samples.reshape((num_samples, 44))
+    # print("reshaped:", vectorized_samples.shape)
+    # print(vectorized_samples[num_samples//2])
+    batches = vectorized_samples[indices]
+
+    return batches
+
+
 
 def get_batch(samples, batch_size, seed=0):
     """
@@ -218,16 +247,26 @@ def normalize_bb(bb, sample_set):
     bb[3] = bb[3] / h
     return bb
 
-def unnormalize_sample(sample, sample_set):
-    """Unnormalizes the sample passed in. Since python is pass-by-object, the return value is actually unnecessary."""
+def unnormalize_bb(bb, sample_set, top_left=False):
+    """Return the normalized values (in LTWH format) for the bounding box passed in. Assumes normalized format is [CX, CY, W, H]."""
     dimensions = set_dimensions[sample_set]
     h = dimensions[0]
     w = dimensions[1]
-    sample[:, 0] = sample[:, 0] * w
-    sample[:, 1] = sample[:, 1] * h
-    sample[:, 2] = sample[:, 2] * w
-    sample[:, 3] = sample[:, 3] * h
-    return sample
+    bb_w = bb[2] * w
+    bb_h = bb[3] * h
+    tmp = np.empty(4)  # Create new variable so we don't alter the input
+    tmp[0] = bb[0] * w - bb_w / 2
+    tmp[1] = bb[1] * h - bb_h / 2
+    tmp[2] = bb_w
+    tmp[3] = bb_h
+    return tmp
+
+def unnormalize_sample(sample, sample_set, top_left=False):
+    """Return the normalized bbs for the sample passed in."""
+    tmp = np.empty((len(sample), 4))
+    for i, bb in enumerate(sample):
+        tmp[i] = unnormalize_bb(bb, sample_set)
+    return tmp
 
 
 def get_transformation(anchor, target):
@@ -259,3 +298,6 @@ if __name__ == '__main__':
     print("shape: ", samples.shape)
     print("ndim: ", samples.ndim)
     print("dtype: ", samples.dtype)
+
+    epoch = get_epoch(samples, 128)
+    print("epoch shape:", epoch.shape)

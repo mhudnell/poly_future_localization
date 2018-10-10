@@ -237,36 +237,40 @@ def get_batch(samples, batch_size, seed=0):
     return np.reshape(batch, (batch_size, -1))
 
 def normalize_bb(bb, sample_set):
-    """Normalizes the sample passed in. Since python is pass-by-object, the return value is actually unnecessary."""
+    """
+    Return the normalized values for the bounding box passed in. Works for
+    both [CX, CY, W, H] and [L, T, W, H] bounding boxes.
+    """
     dimensions = set_dimensions[sample_set]
     h = dimensions[0]
     w = dimensions[1]
-    bb[0] = bb[0] / w
-    bb[1] = bb[1] / h
-    bb[2] = bb[2] / w
-    bb[3] = bb[3] / h
-    return bb
+    normalized = np.empty(4)
+    normalized[0] = bb[0] / w
+    normalized[1] = bb[1] / h
+    normalized[2] = bb[2] / w
+    normalized[3] = bb[3] / h
+    return normalized
 
 def unnormalize_bb(bb, sample_set, top_left=False):
-    """Return the normalized values (in LTWH format) for the bounding box passed in. Assumes normalized format is [CX, CY, W, H]."""
+    """Return the denormalized values (in LTWH format) for the bounding box passed in. Assumes normalized format is [CX, CY, W, H]."""
     dimensions = set_dimensions[sample_set]
     h = dimensions[0]
     w = dimensions[1]
     bb_w = bb[2] * w
     bb_h = bb[3] * h
-    tmp = np.empty(4)  # Create new variable so we don't alter the input
-    tmp[0] = bb[0] * w - bb_w / 2
-    tmp[1] = bb[1] * h - bb_h / 2
-    tmp[2] = bb_w
-    tmp[3] = bb_h
-    return tmp
+    denormalized = np.empty(4)  # Create new variable so we don't alter the input
+    denormalized[0] = bb[0] * w - bb_w / 2
+    denormalized[1] = bb[1] * h - bb_h / 2
+    denormalized[2] = bb_w
+    denormalized[3] = bb_h
+    return denormalized
 
 def unnormalize_sample(sample, sample_set, top_left=False):
-    """Return the normalized bbs for the sample passed in."""
-    tmp = np.empty((len(sample), 4))
+    """Return the denormalized bbs for the sample passed in."""
+    denormalized = np.empty((len(sample), 4))
     for i, bb in enumerate(sample):
-        tmp[i] = unnormalize_bb(bb, sample_set)
-    return tmp
+        denormalized[i] = unnormalize_bb(bb, sample_set)
+    return denormalized
 
 
 def get_transformation(anchor, target):

@@ -81,7 +81,7 @@ def training_steps_GAN(model_components):
                         nb_steps, batch_size, k_d, k_g,
                         steps_per_epoch, show, output_dir] = model_components
 
-    samples, _ = data_extract_1obj.get_kitti_data()
+    samples, _ = data_extract_1obj.get_kitti_training()
     G_loss, D_loss_fake, D_loss_real, D_loss = [], [], [], []
 
     # Store average discrim prediction for generated and real samples every epoch.
@@ -137,9 +137,6 @@ def training_steps_GAN(model_components):
             gen_input = batch[:, :10*4]  # Only keep first 10 bounding boxes for gen input (11th is the target)
             gen_target = batch[:, -4:]  # Get last (target) bounding box
 
-            # for v in gen_target:
-            #     data_extract_1obj.unnormalize_sample(v)
-
             ### TRAIN (y = 1) bc want pos feedback for tricking discrim (want discrim to output 1)
             comb_results = combined_model.train_on_batch(gen_input, {'discriminator': np.random.uniform(low=0.999, high=1.0, size=batch_size),
                                                                      'generator': gen_target})
@@ -174,16 +171,16 @@ def training_steps_GAN(model_components):
             lossFile.write('D_loss_real: {}'.format(D_loss_real[-1]))
             lossFile.write('D_loss: {}'.format(D_loss[-1]))
             lossFile.write('G_loss: {}'.format(G_loss[-1]))
-            lossFile.write('avg_gen_pred: {} | avg_real_pred: {} |\n'.format(a_g_p, a_r_p))
+            lossFile.write('avg_gen_pred: {} | avg_real_pred: {}\n'.format(a_g_p, a_r_p))
 
             # Checkpoint: Save model weights
-            model_checkpoint_base_name = output_dir + 'weights\\{}_weights_echo_{}.h5'
+            model_checkpoint_base_name = output_dir + 'weights\\{}_weights_epoch-{}.h5'
             generator_model.save_weights(model_checkpoint_base_name.format('gen', epoch))
             discriminator_model.save_weights(model_checkpoint_base_name.format('discrim', epoch))
 
     return [G_loss, D_loss_fake, D_loss_real, D_loss, avg_gen_pred, avg_real_pred]
 
-def get_model(data_cols, generator_model_path=None, discriminator_model_path=None, loss_pickle_path=None, seed=0, lr=5e-4):
+def get_model(data_cols, generator_model_path=None, discriminator_model_path=None, loss_pickle_path=None, seed=0, optimizer=None):
     gen_input_dim = 40
     base_n_count = 128
     show = True
@@ -195,7 +192,11 @@ def get_model(data_cols, generator_model_path=None, discriminator_model_path=Non
     K.set_learning_phase(1)  # 1 = train
     G, D, C = define_models_GAN(gen_input_dim, discrim_input_dim, base_n_count)
 
-    adam = optimizers.Adam(lr=lr, beta_1=0.5, beta_2=0.999)
+    # adam = optimizers.Adam(lr=lr, beta_1=0.5, beta_2=0.999)
+    if optimizer and optimizer['name']=='adam':
+        adam = optimizers.Adam(lr=optimizer['lr'], beta_1=optimizer['beta_1'], beta_2=optimizer['beta_2'], decay=optimizer['decay'])
+    else:
+        adam = optimizers.Adam()
 
     # G.compile(optimizer=adam, loss='binary_crossentropy')
     D.compile(optimizer=adam, loss='binary_crossentropy')
@@ -274,13 +275,16 @@ def get_model(data_cols, generator_model_path=None, discriminator_model_path=Non
 
 def test_model_multiple(generator_model, discriminator_model, combined_model, model_name):
     """Test model on a hand-picked set of samples from the data set."""
-    samples, samples_info = data_extract_1obj.get_kitti_data(normalize=True)
+    # samples, samples_info = data_extract_1obj.get_kitti_training(normalize=True)
+    samples, samples_info = data_extract_1obj.get_kitti_testing(normalize=True)
 
     data_dir = 'C:\\Users\\Max\\Research\\maxGAN\\models\\'+model_name+'\\bounding box images\\'
     if not os.path.exists(data_dir):
         os.makedirs(data_dir)
 
-    test_set = [0, 1234, 2345, 3456, 10000, 15000, 19999, 20000]
+    # test_set = [0, 1234, 2345, 3456, 10000, 15000, 19999, 20000]
+    np.random.seed(7)
+    test_set = np.random.choice(len(samples), 20, replace=False)
 
     for i in test_set:
         sample_set = samples_info[i][0]
@@ -317,7 +321,8 @@ def test_model_multiple(generator_model, discriminator_model, combined_model, mo
     return
 
 def test_model_IOU(generator_model, discriminator_model, combined_model, model_name):
-    samples, samples_info = data_extract_1obj.get_kitti_data(normalize=True)
+    # samples, samples_info = data_extract_1obj.get_kitti_training(normalize=True)
+    samples, samples_info = data_extract_1obj.get_kitti_testing(normalize=True)
     print(samples.shape)
     vectors = samples.reshape((len(samples), -1))
     print(vectors.shape)
@@ -339,7 +344,7 @@ def test_model_IOU(generator_model, discriminator_model, combined_model, model_n
 
 def test_discrim(generator_model, discriminator_model, combined_model):
     """Test the discriminator by having it produce a realness score for generated and target images in a sample set."""
-    samples, _ = data_extract_1obj.get_kitti_data(normalize=True)
+    samples, _ = data_extract_1obj.get_kitti_training(normalize=True)
     batch = data_extract_1obj.get_batch(samples, 590)  # , seed=7
 
     gen_correct = 0

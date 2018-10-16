@@ -134,7 +134,21 @@ set_dimensions = {
 #                 obj_bb_dict[obj_id] = deque([bb]) # create a new queue for this obj_id
 #                 obj_lastFrame_dict[obj_id] = int(frame_num)
 
-def get_kitti_data(normalize=True, transform=True):
+def get_kitti_training(normalize=True, transform=True):
+    # training_sets = ["0000", "0001", "0002", "0003", "0004", "0005", "0006", "0007",
+    #                  "0008", "0009", "0010", "0011", "0012", "0013", "0014", "0015", "0016"]
+    training_sets2 = ["0004", "0005", "0006", "0007", "0008", "0009", "0010", "0011",
+                     "0012", "0013", "0014", "0015", "0016", "0017", "0018", "0019", "0020"]
+    return get_kitti_data(training_sets2, normalize=normalize, transform=transform)
+
+def get_kitti_testing(normalize=True, transform=True):
+    # testing_sets = ["0017", "0018", "0019", "0020"]
+    testing_sets2 = ["0000", "0001", "0002", "0003"]
+    # three-fold_1 = ["0000", "0001", "0002"]
+    # three-fold_1 = ["0003", "0001", "0002"]
+    return get_kitti_data(testing_sets2, normalize=normalize, transform=transform)
+
+def get_kitti_data(sets, normalize=True, transform=True):
     """
     Parse kitti label files and construct a set of samples. Each sample has 11 'bounding boxes', where each
     bounding box stores 4 floats (left, top, width, height). The 11th bounding box is the 'target'
@@ -149,6 +163,9 @@ def get_kitti_data(normalize=True, transform=True):
         for file_name in file_names:
             file_path = os.path.join(root, file_name)
             sample_set_name = os.path.splitext(file_name)[0]
+            if sets and sample_set_name not in sets:  # Skip over sets not requested.
+                # print("RESERVING " + sample_set_name + " for testing")
+                continue
             object_queues = {}  # Contains a queue (of bounding boxes) with max size 15 for each object id in the file
             object_last_seen = {}  # Key: Object ids; Value: Last seen frame for the given object
 
@@ -208,11 +225,7 @@ def get_epoch(samples, batch_size, seed=0):
     num_batches = num_samples // batch_size
     indices = np.random.choice(num_samples, size=(num_batches, batch_size), replace=False)
 
-    # print("samples:", samples.shape)
-    # print(samples[num_samples//2])
     vectorized_samples = samples.reshape((num_samples, 44))
-    # print("reshaped:", vectorized_samples.shape)
-    # print(vectorized_samples[num_samples//2])
     batches = vectorized_samples[indices]
 
     return batches
@@ -236,40 +249,80 @@ def get_batch(samples, batch_size, seed=0):
 
     return np.reshape(batch, (batch_size, -1))
 
-def normalize_bb(bb, sample_set):
+def scale_bb(bb, sample_set, desired_res):
+    """
+    Return the scaled version of the specified bounding box, such that it is the desired resolution.
+    Necessary because kitti sample sets come in slightly different dimensions, so one is chosen as
+    the 'best', and all other sets are scaled to the 'best' resolution.
+    """
+    sample_dimensions = set_dimensions[sample_set]
+    scale_w = desired_res[1] / sample_dimensions[1]
+    scale_h = desired_res[0] / sample_dimensions[0]
+    scaled = np.empty(4)
+    scaled[0] = bb[0] * scale_w
+    scaled[1] = bb[1] * scale_h
+    scaled[2] = bb[2] * scale_w
+    scaled[3] = bb[3] * scale_h
+    return scaled
+
+def descale_bb(bb, sample_set, desired_res):
+    """
+    Return the de-scaled version of the specified bounding box, such that it is the sample set's resolution.
+    The input bb is assumed to currently be in the resolution of `desired_res`.
+    """
+    sample_dimensions = set_dimensions[sample_set]
+    scale_w = sample_dimensions[1] / desired_res[1]
+    scale_h = sample_dimensions[0] / desired_res[0]
+    descaled = np.empty(4)
+    descaled[0] = bb[0] * scale_w
+    descaled[1] = bb[1] * scale_h
+    descaled[2] = bb[2] * scale_w
+    descaled[3] = bb[3] * scale_h
+    return descaled
+
+def normalize_bb(bb, sample_set, desired_res=(375, 1242)):
     """
     Return the normalized values for the bounding box passed in. Works for
     both [CX, CY, W, H] and [L, T, W, H] bounding boxes.
     """
-    dimensions = set_dimensions[sample_set]
-    h = dimensions[0]
-    w = dimensions[1]
+    # Scale to desired dimensions before normalizing
+    scaled = scale_bb(bb, sample_set, desired_res)
+    # dimensions = set_dimensions[sample_set]
+    # h = dimensions[0]
+    # w = dimensions[1]
+    h = desired_res[0]
+    w = desired_res[1]
     normalized = np.empty(4)
-    normalized[0] = bb[0] / w
-    normalized[1] = bb[1] / h
-    normalized[2] = bb[2] / w
-    normalized[3] = bb[3] / h
+    normalized[0] = scaled[0] / w
+    normalized[1] = scaled[1] / h
+    normalized[2] = scaled[2] / w
+    normalized[3] = scaled[3] / h
     return normalized
 
-def unnormalize_bb(bb, sample_set, top_left=False):
+def unnormalize_bb(bb, sample_set, desired_res=(375, 1242), top_left=False):
     """Return the denormalized values (in LTWH format) for the bounding box passed in. Assumes normalized format is [CX, CY, W, H]."""
-    dimensions = set_dimensions[sample_set]
-    h = dimensions[0]
-    w = dimensions[1]
+    # dimensions = set_dimensions[sample_set]
+    # h = dimensions[0]
+    # w = dimensions[1]
+    h = desired_res[0]
+    w = desired_res[1]
     bb_w = bb[2] * w
     bb_h = bb[3] * h
-    denormalized = np.empty(4)  # Create new variable so we don't alter the input
-    denormalized[0] = bb[0] * w - bb_w / 2
-    denormalized[1] = bb[1] * h - bb_h / 2
+    denormalized = np.empty(4)
+    denormalized[0] = bb[0] * w
+    denormalized[1] = bb[1] * h
     denormalized[2] = bb_w
     denormalized[3] = bb_h
-    return denormalized
+    # Scale back to original dimensions after denormalizing
+    descaled = descale_bb(denormalized, sample_set, desired_res)
+    return descaled
 
 def unnormalize_sample(sample, sample_set, top_left=False):
     """Return the denormalized bbs for the sample passed in."""
     denormalized = np.empty((len(sample), 4))
     for i, bb in enumerate(sample):
-        denormalized[i] = unnormalize_bb(bb, sample_set)
+        unnormal = unnormalize_bb(bb, sample_set)
+        denormalized[i] = center_to_topleft_bb(unnormal)
     return denormalized
 
 
@@ -291,17 +344,29 @@ def transform(anchor, t):
     proposal[3] = anchor[3]*exp(t[3])
     return proposal
 
+def center_to_topleft_bb(bb):
+    """Convert bounding box from format [CX, CY, W, H] to [L, T, W, H]."""
+    topleft = np.empty(4)
+    topleft[0] = bb[0] - bb[2] / 2
+    topleft[1] = bb[1] - bb[3] / 2
+    topleft[2] = bb[2]
+    topleft[3] = bb[3]
+    return topleft
+
 if __name__ == '__main__':
     # samples, _ = get_kitti_data(normalize=True)
     # batch = get_batch(samples, 3, seed=7)
     # print(batch)
     # print(batch[:, :4*10])
 
-    samples, _ = get_kitti_data(normalize=True)
-    print(samples)
-    print("shape: ", samples.shape)
-    print("ndim: ", samples.ndim)
-    print("dtype: ", samples.dtype)
+    samples_train, _ = get_kitti_training(normalize=True)
+    # print(samples)
+    print("shape: ", samples_train.shape)
+    # print("ndim: ", samples.ndim)
+    # print("dtype: ", samples.dtype)
 
-    epoch = get_epoch(samples, 128)
-    print("epoch shape:", epoch.shape)
+    samples_test, _ = get_kitti_testing(normalize=True)
+    print("shape: ", samples_test.shape)
+
+    # epoch = get_epoch(samples, 128)
+    # print("epoch shape:", epoch.shape)

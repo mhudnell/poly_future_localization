@@ -22,6 +22,7 @@ def drawFrameRects(sample_set, frame, objId, bb, isGen, folder_dir):
     proposal = data_extract_1obj.transform(bb[-2], bb[-1])
     bb[-1] = proposal
     unnormal = data_extract_1obj.unnormalize_sample(bb, sample_set)
+    # topleft = data_extract_1obj.center_to_topleft_bb(unnormal)
 
     # Convert bb (LTWH values) to ints.
     bb_int = np.zeros((len(unnormal), 4), dtype='int32')
@@ -60,11 +61,17 @@ class Rect:
         return "l:" + str(self.l) + " t:" + str(self.t) + " r:" + str(self.r) + " b:" + str(self.b) + " area:" + str(self.area)
 
     @classmethod
-    def make_center_XYWH(cls, cx, cy, w, h):
+    def make_cXcYWH(cls, cx, cy, w, h):
         l = cx - w/2
         t = cy - h/2
         r = cx + w/2
         b = cy + h/2
+        return cls(l, t, r, b)
+
+    @classmethod
+    def make_LTWH(cls, l, t, w, h):
+        r = l + w
+        b = t + h
         return cls(l, t, r, b)
 
 def get_IoU(anchor, target_transform, generated_transform, sample_set):
@@ -73,8 +80,8 @@ def get_IoU(anchor, target_transform, generated_transform, sample_set):
     t_bb = data_extract_1obj.unnormalize_bb(t_bb, sample_set)
     g_bb = data_extract_1obj.unnormalize_bb(g_bb, sample_set)
 
-    target = Rect(t_bb[0], t_bb[1], t_bb[0] + t_bb[2], t_bb[1] + t_bb[3])
-    generated = Rect(g_bb[0], g_bb[1], g_bb[0] + g_bb[2], g_bb[1] + g_bb[3])
+    target = Rect.make_cXcYWH(t_bb[0], t_bb[1], t_bb[2], t_bb[3])
+    generated = Rect.make_cXcYWH(g_bb[0], g_bb[1], g_bb[2], g_bb[3])
     intersect = Rect(max(target.l, generated.l), max(target.t, generated.t),
                      min(target.r, generated.r), min(target.b, generated.b))
 

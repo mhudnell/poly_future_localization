@@ -73,15 +73,16 @@ def define_models_GAN(gen_input_dim, discrim_input_dim, base_n_count, type=None)
 
     return G, D, C
 
-def training_steps_GAN(model_components):
-
+def training_steps_GAN(train_data, train_data_info, val_data, val_data_info, model_components):
+    """ """
     [model_name, starting_step, data_cols,
-                        label_cols, label_dim,
-                        generator_model, discriminator_model, combined_model,
-                        nb_steps, batch_size, k_d, k_g,
-                        steps_per_epoch, show, output_dir] = model_components
+     label_cols, label_dim,
+     generator_model, discriminator_model, combined_model,
+     epochs, batch_size, k_d, k_g,
+     show, output_dir] = model_components
+    steps_per_epoch = len(train_data) // batch_size
+    nb_steps = steps_per_epoch*epochs
 
-    samples, _ = data_extract_1obj.get_kitti_training()
     G_loss, D_loss_fake, D_loss_real, D_loss = [], [], [], []
 
     # Store average discrim prediction for generated and real samples every epoch.
@@ -103,7 +104,7 @@ def training_steps_GAN(model_components):
 
         # TRAIN DISCRIMINATOR on real and generated images
         for _ in range(k_d):
-            batch = data_extract_1obj.get_batch(samples, batch_size)
+            batch = data_extract_1obj.get_batch(train_data, batch_size)
             gen_input = batch[:, :10*4]  # Only keep first 10 bounding boxes for gen input (11th is the target)
 
             g_z = generator_model.predict(gen_input)
@@ -112,13 +113,6 @@ def training_steps_GAN(model_components):
             g_z = np.concatenate((gen_input, g_z), axis=1)
             # print("g_concat.shape", g_z.shape)
             # print(g_z[0])
-
-            # for i in range(len(batch)):
-            #     for x in batch[i][-4:]:
-            #         if x > 1:
-            #             print("g_z:", g_z[i][-4:])
-            #             print("target:", batch[i][-4:])
-            #             break
 
             ### TRAIN ON REAL (y = 1) w/ noise
             disc_real_results = discriminator_model.train_on_batch(batch, np.random.uniform(low=0.999, high=1.0, size=batch_size))      # 0.7, 1.2 GANs need noise to prevent loss going to zero
@@ -133,7 +127,7 @@ def training_steps_GAN(model_components):
 
         # TRAIN GENERATOR on real inputs and outputs
         for _ in range(k_g):
-            batch = data_extract_1obj.get_batch(samples, batch_size)
+            batch = data_extract_1obj.get_batch(train_data, batch_size)
             gen_input = batch[:, :10*4]  # Only keep first 10 bounding boxes for gen input (11th is the target)
             gen_target = batch[:, -4:]  # Get last (target) bounding box
 
@@ -147,15 +141,8 @@ def training_steps_GAN(model_components):
         if not i % steps_per_epoch:
             K.set_learning_phase(0) # 0 = test
             epoch = i // steps_per_epoch
-            # print('learning_rates: ', K.get_value(discriminator_model.optimizer.lr), ", ", K.get_value(combined_model.optimizer.lr))
-
-            # half learning rate every 5 epochs
-            # if not i % (steps_per_epoch*5): # UPDATE LEARNING RATE
-                # They all share an optimizer, so this decreases the lr for all models
-                # K.set_value(discriminator_model.optimizer.lr, K.get_value(discriminator_model.optimizer.lr) / 2)
-                # print('~~~~~~~~~~~~~~~DECREMENTING lr to: ', K.get_value(discriminator_model.optimizer.lr), ", ", K.get_value(combined_model.optimizer.lr))
             
-            a_g_p, a_r_p = test_discrim(generator_model, discriminator_model, combined_model)
+            a_g_p, a_r_p = test_discrim(train_data, generator_model, discriminator_model, combined_model)
             avg_gen_pred.append(a_g_p)
             avg_real_pred.append(a_r_p)
 
@@ -342,10 +329,10 @@ def test_model_IOU(generator_model, discriminator_model, combined_model, model_n
     return
 
 
-def test_discrim(generator_model, discriminator_model, combined_model):
+def test_discrim(train_data, generator_model, discriminator_model, combined_model):
     """Test the discriminator by having it produce a realness score for generated and target images in a sample set."""
-    samples, _ = data_extract_1obj.get_kitti_training(normalize=True)
-    batch = data_extract_1obj.get_batch(samples, 590)  # , seed=7
+    # samples, _ = data_extract_1obj.get_kitti_training(normalize=True)
+    batch = data_extract_1obj.get_batch(train_data, 590)  # , seed=7
 
     gen_correct = 0
     gen_incorrect = 0

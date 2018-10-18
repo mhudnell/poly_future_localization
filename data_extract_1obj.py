@@ -163,8 +163,9 @@ def get_kitti_data(sets, normalize=True, transform=True):
         for file_name in file_names:
             file_path = os.path.join(root, file_name)
             sample_set_name = os.path.splitext(file_name)[0]
-            if sets and sample_set_name not in sets:  # Skip over sets not requested.
+            if sets is not None and int(sample_set_name) not in sets:  # Skip over sets not requested.
                 # print("RESERVING " + sample_set_name + " for testing")
+                # print(int(sample_set_name), "not in ", sets)
                 continue
             object_queues = {}  # Contains a queue (of bounding boxes) with max size 15 for each object id in the file
             object_last_seen = {}  # Key: Object ids; Value: Last seen frame for the given object

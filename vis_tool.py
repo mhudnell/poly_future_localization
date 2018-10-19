@@ -10,7 +10,7 @@ def drawFrameRects(sample_set, frame, objId, bb, isGen, folder_dir):
         sample_set (string): The set to get the specified frame from.
         frame (string): The frame to draw boxes on.
         objId (string): The id of the object being tracked.
-        bb ((n,4) array): An array with each row being LTWH values describing a bounding box.
+        bb ((n,4) array): An array with each row being LTWH values describing a bounding box. bb[-1] is a transform, bb[-2] is anchor box.
         isGen (boolean): Indicates whether the concluding bounding box in 'bb' was generated, or if it is the target.
         folder_dir: The folder to output the drawn images to.
     '''
@@ -74,11 +74,11 @@ class Rect:
         b = t + h
         return cls(l, t, r, b)
 
-def get_IoU(anchor, target_transform, generated_transform, sample_set):
+def get_IoU(anchor, target_transform, generated_transform, sample_set=None):
     t_bb = data_extract_1obj.transform(anchor, target_transform)
     g_bb = data_extract_1obj.transform(anchor, generated_transform)
-    t_bb = data_extract_1obj.unnormalize_bb(t_bb, sample_set)
-    g_bb = data_extract_1obj.unnormalize_bb(g_bb, sample_set)
+    t_bb = data_extract_1obj.unnormalize_bb(t_bb, sample_set=sample_set)
+    g_bb = data_extract_1obj.unnormalize_bb(g_bb, sample_set=sample_set)
 
     target = Rect.make_cXcYWH(t_bb[0], t_bb[1], t_bb[2], t_bb[3])
     generated = Rect.make_cXcYWH(g_bb[0], g_bb[1], g_bb[2], g_bb[3])

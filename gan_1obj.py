@@ -10,19 +10,26 @@ import tensorflow as tf
 import os
 import re
 
-from vis_tool import drawFrameRects, get_IoU
+from vis_tool import drawFrameRects, get_IoU, Rect
 import data_extract_1obj
 
+# def iou_metric(input):
+#     def iou(y_true, y_pred):
+#         print(input.get_shape())
+#         anchor = tf.slice(input, [36], [4])
+#         print(anchor.get_shape())
+#         # sess = tf.InteractiveSession()
+#         # anchor = input.eval()[-4:]
+#         # return get_IoU(anchor, y_true.eval(), y_pred.eval())
+#     return iou
 
 def smoothL1(y_true, y_pred):
-    # y_true1 = tf.multiply(y_true, tf.convert_to_tensor([1240.0, 375.0, 1240.0, 375.0]))
-    # y_pred1 = tf.multiply(y_pred, tf.convert_to_tensor([1240.0, 375.0, 1240.0, 375.0]))
     tmp = tf.abs(y_pred - y_true)
     condition = tf.less(tmp, 1.)
     return tf.reduce_sum(tf.where(condition, tf.scalar_mul(0.5, tf.square(tmp)), tmp - 0.5), axis=-1)
 
-def combined_loss(y_true, y_pred, a=0.5, b=0.5):
-    return a*losses.binary_crossentropy(y_true, y_pred) + b*smoothL1(y_true, y_pred)
+# def combined_loss(y_true, y_pred, a=0.5, b=0.5):
+#     return a*losses.binary_crossentropy(y_true, y_pred) + b*smoothL1(y_true, y_pred)
 
 def generator_network(x, discrim_input_dim, base_n_count):
     # x = layers.Dense(base_n_count)(x)
@@ -37,7 +44,7 @@ def generator_network(x, discrim_input_dim, base_n_count):
     x = layers.Dense(64, activation="relu")(x)
     x = layers.Dense(64, activation="relu")(x)
     x = layers.Dense(64, activation="relu")(x)
-    x = layers.Dense(4, activation="linear")(x)
+    x = layers.Dense(4, activation="linear", name="g_output")(x)
     return x
 
 def discriminator_network(x, discrim_input_dim, base_n_count):
@@ -54,7 +61,7 @@ def discriminator_network(x, discrim_input_dim, base_n_count):
     return x
 
 def define_models_GAN(gen_input_dim, discrim_input_dim, base_n_count, type=None):
-    G_input = layers.Input(shape=(gen_input_dim, ))
+    G_input = layers.Input(shape=(gen_input_dim, ), name="g_input")
     G_output = generator_network(G_input, discrim_input_dim, base_n_count)
 
     D_input = layers.Input(shape=(discrim_input_dim,))
@@ -65,8 +72,7 @@ def define_models_GAN(gen_input_dim, discrim_input_dim, base_n_count, type=None)
     D = models.Model(inputs=[D_input], outputs=[D_output], name='discriminator')
 
     # 1. G takes G_input as input, returns a generated tensor
-    # 2. D takes generated tensor as input, returns a tensor which is the combined output
-    # C_output = D(G(G_input))
+    # 2. D takes generated tensor + G_input as input, returns a tensor which is the combined output
     C_G_output = G(G_input)
     C_output = D(layers.concatenate([G_input, C_G_output]))
     C = models.Model(inputs=[G_input], outputs=[C_output, C_G_output], name='combined')
@@ -83,7 +89,11 @@ def training_steps_GAN(train_data, train_data_info, val_data, val_data_info, mod
     steps_per_epoch = len(train_data) // batch_size
     nb_steps = steps_per_epoch*epochs
 
-    G_loss, D_loss_fake, D_loss_real, D_loss = [], [], [], []
+    # G_loss, D_loss_fake, D_loss_real, D_loss, val_losses = [], [], [], [], []
+    G_losses = np.empty((nb_steps, 3))
+    D_losses = np.empty((nb_steps, 3))
+    val_losses = np.empty((nb_steps, 3))
+    ious = np.empty((nb_steps, 2))          # Stores train and val data
 
     # Store average discrim prediction for generated and real samples every epoch.
     avg_gen_pred, avg_real_pred = [], []
@@ -98,9 +108,8 @@ def training_steps_GAN(train_data, train_data_info, val_data, val_data_info, mod
     with open(output_dir+"G_model.json", "w") as f:
         f.write(generator_model.to_json(indent=4))
 
-    for i in range(1, nb_steps+1):
+    for i in range(1, nb_steps+1):  # range(1, nb_steps+1)
         K.set_learning_phase(1)  # 1 = train
-        # epoch = data_extract_1obj.get_epoch(samples, batch_size)
 
         # TRAIN DISCRIMINATOR on real and generated images
         for _ in range(k_d):
@@ -108,22 +117,17 @@ def training_steps_GAN(train_data, train_data_info, val_data, val_data_info, mod
             gen_input = batch[:, :10*4]  # Only keep first 10 bounding boxes for gen input (11th is the target)
 
             g_z = generator_model.predict(gen_input)
-            # print("g_z.shape", g_z.shape)
-            # print(g_z[0])
             g_z = np.concatenate((gen_input, g_z), axis=1)
-            # print("g_concat.shape", g_z.shape)
-            # print(g_z[0])
 
             ### TRAIN ON REAL (y = 1) w/ noise
-            disc_real_results = discriminator_model.train_on_batch(batch, np.random.uniform(low=0.999, high=1.0, size=batch_size))      # 0.7, 1.2 GANs need noise to prevent loss going to zero
+            D_loss_real = discriminator_model.train_on_batch(batch, np.random.uniform(low=0.999, high=1.0, size=batch_size))      # 0.7, 1.2 GANs need noise to prevent loss going to zero
 
             ### TRAIN ON GENERATED (y = 0) w/ noise
-            disc_gen_results = discriminator_model.train_on_batch(g_z, np.random.uniform(low=0.0, high=0.001, size=batch_size))    # 0.0, 0.3
-            d_l = 0.5 * np.add(disc_real_results, disc_gen_results)
+            D_loss_fake = discriminator_model.train_on_batch(g_z, np.random.uniform(low=0.0, high=0.001, size=batch_size))    # 0.0, 0.3
+            D_loss = 0.5 * np.add(D_loss_real, D_loss_fake)
 
-        D_loss_real.append(disc_real_results)
-        D_loss_fake.append(disc_gen_results)
-        D_loss.append(d_l)
+        # Only keep most recent loss value (if k_d > 1)
+        D_losses[i-1] = np.array([D_loss, D_loss_real, D_loss_fake])
 
         # TRAIN GENERATOR on real inputs and outputs
         for _ in range(k_g):
@@ -132,32 +136,44 @@ def training_steps_GAN(train_data, train_data_info, val_data, val_data_info, mod
             gen_target = batch[:, -4:]  # Get last (target) bounding box
 
             ### TRAIN (y = 1) bc want pos feedback for tricking discrim (want discrim to output 1)
-            comb_results = combined_model.train_on_batch(gen_input, {'discriminator': np.random.uniform(low=0.999, high=1.0, size=batch_size),
-                                                                     'generator': gen_target})
+            G_loss = combined_model.train_on_batch(gen_input, {'discriminator': np.random.uniform(low=0.999, high=1.0, size=batch_size),
+                                                               'generator': gen_target})
+            y_preds = G_loss[4]
+            avg_iou = np.mean([get_IoU(gen_input[i][-4:], gen_target[i], y_preds[i]) for i in range(len(y_preds))])
 
-        G_loss.append(comb_results)
+            K.set_learning_phase(0)
+            # Run validation batch
+            batch = data_extract_1obj.get_batch(val_data, batch_size)
+            gen_input = batch[:, :10*4]
+            gen_target = batch[:, -4:]
+            val_loss = combined_model.test_on_batch(gen_input, {'discriminator': np.random.uniform(low=0.999, high=1.0, size=batch_size),
+                                                                'generator': gen_target})
+            val_avg_iou = np.mean([get_IoU(gen_input[i][-4:], gen_target[i], val_loss[4][i]) for i in range(len(y_preds))])
+
+        G_losses[i-1] = G_loss[:3]
+        val_losses[i-1] = val_loss[:3]
+        ious[i-1] = [avg_iou, val_avg_iou]
 
         # Save weights / Log loss every epoch
         if not i % steps_per_epoch:
             K.set_learning_phase(0) # 0 = test
             epoch = i // steps_per_epoch
-            
+
             a_g_p, a_r_p = test_discrim(train_data, generator_model, discriminator_model, combined_model)
             avg_gen_pred.append(a_g_p)
             avg_real_pred.append(a_r_p)
 
             print('Epoch: {} of {}'.format(epoch, nb_steps // steps_per_epoch))
-            print('D_loss_fake: {}'.format(D_loss_fake[-1]))
-            print('D_loss_real: {}'.format(D_loss_real[-1]))
-            print('D_loss: {}'.format(D_loss[-1]))
-            print('G_loss: {}'.format(G_loss[-1]))
-            print('avg_gen_pred: {} | avg_real_pred: {} |\n'.format(a_g_p, a_r_p))
+            print('D_losses: {}'.format(D_losses[i-1]))
+            print('G_losses: {}'.format(G_losses[i-1]))
+            print('val_losses: {}'.format(val_losses[i-1]))
+            print('ious: {}'.format(ious[i-1]))
+            print('avg_gen_pred: {} | avg_real_pred: {}\n'.format(a_g_p, a_r_p))
 
             lossFile.write('Epoch: {} of {}.\n'.format(epoch, nb_steps // steps_per_epoch))
-            lossFile.write('D_loss_fake: {}'.format(D_loss_fake[-1]))
-            lossFile.write('D_loss_real: {}'.format(D_loss_real[-1]))
-            lossFile.write('D_loss: {}'.format(D_loss[-1]))
-            lossFile.write('G_loss: {}'.format(G_loss[-1]))
+            lossFile.write('D_losses: {}'.format(D_losses[i-1]))
+            lossFile.write('G_losses: {}'.format(G_losses[i-1]))
+            lossFile.write('val_losses: {}'.format(val_losses[i-1]))
             lossFile.write('avg_gen_pred: {} | avg_real_pred: {}\n'.format(a_g_p, a_r_p))
 
             # Checkpoint: Save model weights
@@ -165,15 +181,13 @@ def training_steps_GAN(train_data, train_data_info, val_data, val_data_info, mod
             generator_model.save_weights(model_checkpoint_base_name.format('gen', epoch))
             discriminator_model.save_weights(model_checkpoint_base_name.format('discrim', epoch))
 
-    return [G_loss, D_loss_fake, D_loss_real, D_loss, avg_gen_pred, avg_real_pred]
+    return [G_losses, D_losses, val_losses, ious, avg_gen_pred, avg_real_pred]
 
 def get_model(data_cols, generator_model_path=None, discriminator_model_path=None, loss_pickle_path=None, seed=0, optimizer=None):
+    discrim_input_dim = len(data_cols)
     gen_input_dim = 40
     base_n_count = 128
     show = True
-
-    # np.random.seed(seed)
-    discrim_input_dim = len(data_cols)
 
     # Define network models.
     K.set_learning_phase(1)  # 1 = train
@@ -189,8 +203,11 @@ def get_model(data_cols, generator_model_path=None, discriminator_model_path=Non
     D.compile(optimizer=adam, loss='binary_crossentropy')
     print(D.summary())
     D.trainable = False  # Freeze discriminator weights in combined model (we want to improve model by improving generator, rather than making the discriminator worse)
-    C.compile(optimizer=adam, loss={'discriminator': 'binary_crossentropy', 'generator': smoothL1}, 
+    C.compile(optimizer=adam, loss={'discriminator': 'binary_crossentropy', 'generator': smoothL1},
               loss_weights={'discriminator': 0.5, 'generator': 0.5})
+
+    # Add model outputs to return values
+    C.metrics_tensors += C.outputs
 
     if show:
         print(G.summary())
@@ -293,7 +310,7 @@ def test_model_multiple(generator_model, discriminator_model, combined_model, mo
         print("d_pred_real:", d_pred_real, "d_pred_gen:", d_pred_gen)
         print("generated_transform:", generated[-1])
         print("target_transform:", target[-1])
-        print("iou:", get_IoU(target[-2], target[-1], generated[-1], sample_set))
+        print("iou:", get_IoU(target[-2], target[-1], generated[-1], sample_set=sample_set))
         # with tf.Session() as sess:
         #     print("smoothL1 loss:", sess.run(smoothL1(target[-1], generated[-1])), "\n")
 
@@ -323,7 +340,7 @@ def test_model_IOU(generator_model, discriminator_model, combined_model, model_n
         g_z = generator_model.predict(gen_input.reshape((1, -1)))
 
         # print(samples[i][-1].shape, g_z.shape)
-        ious[i] = get_IoU(samples[i][-2], samples[i][-1], g_z[0], sample_set)
+        ious[i] = get_IoU(samples[i][-2], samples[i][-1], g_z[0], sample_set=sample_set)
 
     print("avg IOU:", np.mean(ious))
     return

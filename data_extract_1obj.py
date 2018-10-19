@@ -300,11 +300,8 @@ def normalize_bb(bb, sample_set, desired_res=(375, 1242)):
     normalized[3] = scaled[3] / h
     return normalized
 
-def unnormalize_bb(bb, sample_set, desired_res=(375, 1242), top_left=False):
+def unnormalize_bb(bb, sample_set=None, desired_res=(375, 1242), top_left=False):
     """Return the denormalized values (in LTWH format) for the bounding box passed in. Assumes normalized format is [CX, CY, W, H]."""
-    # dimensions = set_dimensions[sample_set]
-    # h = dimensions[0]
-    # w = dimensions[1]
     h = desired_res[0]
     w = desired_res[1]
     bb_w = bb[2] * w
@@ -315,8 +312,9 @@ def unnormalize_bb(bb, sample_set, desired_res=(375, 1242), top_left=False):
     denormalized[2] = bb_w
     denormalized[3] = bb_h
     # Scale back to original dimensions after denormalizing
-    descaled = descale_bb(denormalized, sample_set, desired_res)
-    return descaled
+    if sample_set is not None:
+        denormalized = descale_bb(denormalized, sample_set, desired_res)
+    return denormalized
 
 def unnormalize_sample(sample, sample_set, top_left=False):
     """Return the denormalized bbs for the sample passed in."""

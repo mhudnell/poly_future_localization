@@ -27,36 +27,45 @@ def log_hyperparams(model_name=None, output_dir=None, epochs=None, batch_size=No
         logging.info('    |-beta2: {}'.format(optimizer['beta_2']))
         logging.info('    |-decay: {}'.format(optimizer['decay']))
 
-def plot_loss(model_name, epochs, nb_steps, output_dir, G_loss, D_loss, D_loss_fake, D_loss_real, avg_gen_pred, avg_real_pred):
+def plot_loss(model_name, epochs, nb_steps, steps_per_epoch, output_dir, G_losses, D_losses, val_losses, ious, avg_gen_pred, avg_real_pred):
     # PLOT LOSS
-    x = np.arange(nb_steps)
-    fig = plt.figure(figsize=(11, 8))
+    x = np.arange(1, nb_steps+1) / steps_per_epoch
+    fig = plt.figure(figsize=(18, 12), dpi=72)
     ax1 = fig.add_subplot(111)
 
-    G_loss = np.array(G_loss)
-    ax1.plot(x, D_loss_fake, label='d_loss_fake')
-    ax1.plot(x, D_loss_real, label='d_loss_real')
-    ax1.plot(x, D_loss, label='d_loss')
-    ax1.plot(x, G_loss[:, 1], label='g_loss_adv')
-    ax1.plot(x, G_loss[:, 2], label='smoothL1')
-    ax1.plot(x, G_loss[:, 0], label='g_loss')
-    ax1.legend(loc=1)
-    fig.suptitle(model_name, fontsize=20)
-    plt.xlabel('number of steps', fontsize=18)
-    plt.ylabel('loss', fontsize=16)
+    # ax1.plot(x, D_losses[:, 0], label='d_loss')
+    ax1.plot(x, D_losses[:, 1], label='d_loss_real')
+    ax1.plot(x, D_losses[:, 2], label='d_loss_fake')
+    
+    ax1.plot(x, G_losses[:, 0], label='g_loss')
+    ax1.plot(x, G_losses[:, 1], label='g_loss_adv')
+    ax1.plot(x, G_losses[:, 2], label='smoothL1')
+    ax1.plot(x, ious[:, 0], label='iou')
 
+    ax1.plot(x, val_losses[:, 0], label='val_g_loss')
+    ax1.plot(x, val_losses[:, 1], label='val_g_loss_adv')
+    ax1.plot(x, val_losses[:, 2], label='val_smoothL1')
+    ax1.plot(x, ious[:, 1], label='val_iou')
+
+    ax1.legend(loc=3)
+    fig.suptitle(model_name, fontsize=12)
+    plt.xlabel('epoch', fontsize=18)
+    plt.ylabel('loss value', fontsize=16)
+
+    plt.tight_layout()
     plt.savefig(output_dir + 'loss_plot.png')
+    # plt.show()
 
     # PLOT DISCRIM PREDICTIONS
     x = np.arange(epochs)
-    fig = plt.figure(figsize=(11, 8))
+    fig = plt.figure(figsize=(18, 12), dpi=72)
     ax1 = fig.add_subplot(111)
 
     ax1.plot(x, avg_gen_pred, label='avg_gen_pred')
     ax1.plot(x, avg_real_pred, label='avg_real_pred')
 
     ax1.legend(loc=1)
-    fig.suptitle(model_name, fontsize=20)
+    fig.suptitle(model_name, fontsize=12)
     plt.xlabel('epoch', fontsize=18)
     plt.ylabel('avg prediction', fontsize=16)
 
@@ -104,10 +113,10 @@ def train_single(model_specs, train_data=None, train_data_info=None, val_data=No
                         generator_model, discriminator_model, combined_model,
                         epochs, batch_size, k_d, k_g,
                         show, output_dir]
-    [G_loss, D_loss_fake, D_loss_real, D_loss, avg_gen_pred, avg_real_pred] = gan_1obj.training_steps_GAN(train_data, train_data_info, val_data, val_data_info, model_components)
+    [G_losses, D_losses, val_losses, ious, avg_gen_pred, avg_real_pred] = gan_1obj.training_steps_GAN(train_data, train_data_info, val_data, val_data_info, model_components)
 
     # Plot losses
-    plot_loss(model_name, epochs, nb_steps, output_dir, G_loss, D_loss, D_loss_fake, D_loss_real, avg_gen_pred, avg_real_pred)
+    plot_loss(model_name, epochs, nb_steps, steps_per_epoch, output_dir, G_losses, D_losses, val_losses, ious, avg_gen_pred, avg_real_pred)
 
 
 def train_k_fold(k, model_specs):
@@ -137,7 +146,7 @@ if __name__ == '__main__':
             data_cols.append(char + str(fNum))
     label_cols = []
     label_dim = 0
-    epochs = 3
+    epochs = 150
     batch_size = 1024  # 128, 64
     # steps_per_epoch = num_samples // batch_size  # ~1 epoch (35082 / 32 =~ 1096, 128: 274, 35082: 1)  # interval (in steps) at which to log loss summaries and save plots of image samples to disc
     # nb_steps = steps_per_epoch*epochs  # 50000 # Add one for logging of the last interval
@@ -153,17 +162,31 @@ if __name__ == '__main__':
                 'beta_2': .999,     # default: .999
                 'decay': 0       # default: 0
                 }
-    model_name = 'maxGAN_6-fold_G6-64_D3-32_0.5adv_{}-{}lr-{}beta1-{}beta2_bs{}_kd{}_kg{}_epochs{}'.format(
+    model_name = 'maxGAN_6-fold_val_G6-64_D3-32_0.5adv_{}-{}lr-{}beta1-{}beta2_bs{}_kd{}_kg{}_epochs{}'.format(
         optimizer['name'], optimizer['lr'], optimizer['beta_1'], optimizer['beta_2'], batch_size, k_d, k_g, epochs
         )
     output_dir = 'C:\\Users\\Max\\Research\\maxGAN\\models\\'+model_name+'\\'
     show = True
 
-    # # Train Model
+    # Train Model
     model_specs = [model_name, starting_step, data_cols,
                    label_cols, label_dim, optimizer,
                    epochs, batch_size, k_d, k_g,
                    show, output_dir]
 
-    # train_single(model_specs)
+    # Train single model with random 15-3-3 (train-validation-test) split
+    # if not (train_data and train_data_info and val_data and val_data_info):
+    #     # Copied from train_k_fold, only gets first split
+    #     np.random.seed(6)
+    #     all_sets = np.arange(21)
+    #     test_sets = np.random.choice(all_sets, 3, replace=False)
+    #     remaining = np.setdiff1d(all_sets, test_sets)
+    #     validation_groups = np.random.choice(remaining, (k, len(remaining)//k), replace=False)
+
+    #     train_sets = np.setdiff1d(remaining, validation_groups[0])
+    #     train_data, train_data_info = data_extract_1obj.get_kitti_data(train_sets)
+    #     val_data, val_data_info = data_extract_1obj.get_kitti_data(validation_groups[0])
+    # train_single(model_specs, train_data, train_data_info, val_data, val_data_info)
+
+    # Perform k-fold cross validation
     train_k_fold(6, model_specs)

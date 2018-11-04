@@ -10,7 +10,7 @@ import tensorflow as tf
 import os
 import re
 
-from vis_tool import drawFrameRects, get_IoU, Rect
+from vis_tool import drawFrameRects, get_IoU, Rect, calc_metrics
 import data_extract_1obj
 
 # def iou_metric(input):
@@ -88,12 +88,17 @@ def training_steps_GAN(train_data, train_data_info, val_data, val_data_info, mod
      show, output_dir] = model_components
     steps_per_epoch = len(train_data) // batch_size
     nb_steps = steps_per_epoch*epochs
+    val_data_input = val_data.reshape((len(val_data), -1))[:, :10*4]
+    val_data_target = val_data.reshape((len(val_data), -1))[:, -4:]
 
-    # G_loss, D_loss_fake, D_loss_real, D_loss, val_losses = [], [], [], [], []
     G_losses = np.empty((nb_steps, 3))
     D_losses = np.empty((nb_steps, 3))
-    val_losses = np.empty((nb_steps, 3))
-    ious = np.empty((nb_steps, 2))          # Stores train and val data
+    val_losses = np.empty((epochs, 3))
+    # ious = np.empty((nb_steps, 2))          # Stores train and val data
+    train_ious =  np.empty(nb_steps)
+    val_ious = np.empty(epochs)
+    train_des =  np.zeros(nb_steps)
+    val_des = np.zeros(epochs)
 
     # Store average discrim prediction for generated and real samples every epoch.
     avg_gen_pred, avg_real_pred = [], []
@@ -109,7 +114,7 @@ def training_steps_GAN(train_data, train_data_info, val_data, val_data_info, mod
         f.write(generator_model.to_json(indent=4))
 
     for i in range(1, nb_steps+1):  # range(1, nb_steps+1)
-        K.set_learning_phase(1)  # 1 = train
+        K.set_learning_phase(1)
 
         # TRAIN DISCRIMINATOR on real and generated images
         for _ in range(k_d):
@@ -139,51 +144,74 @@ def training_steps_GAN(train_data, train_data_info, val_data, val_data_info, mod
             G_loss = combined_model.train_on_batch(gen_input, {'discriminator': np.random.uniform(low=0.999, high=1.0, size=batch_size),
                                                                'generator': gen_target})
             y_preds = G_loss[4]
-            avg_iou = np.mean([get_IoU(gen_input[i][-4:], gen_target[i], y_preds[i]) for i in range(len(y_preds))])
 
-            K.set_learning_phase(0)
-            # Run validation batch
-            batch = data_extract_1obj.get_batch(val_data, batch_size)
-            gen_input = batch[:, :10*4]
-            gen_target = batch[:, -4:]
-            val_loss = combined_model.test_on_batch(gen_input, {'discriminator': np.random.uniform(low=0.999, high=1.0, size=batch_size),
-                                                                'generator': gen_target})
-            val_avg_iou = np.mean([get_IoU(gen_input[i][-4:], gen_target[i], val_loss[4][i]) for i in range(len(y_preds))])
+            # batch_ious = np.empty(len(y_preds))
+            # batch_des = np.empty(len(y_preds))
+            # for i in range(len(y_preds)):
+            #     batch_ious[i], batch_des[i] = calc_metrics(gen_input[i][-4:], gen_target[i], y_preds[i])
+            
+            avg_iou = np.mean([get_IoU(gen_input[i][-4:], gen_target[i], y_preds[i]) for i in range(len(y_preds))])
+            # avg_iou = np.mean(batch_ious)
+            # avg_de = np.mean(batch_des)
 
         G_losses[i-1] = G_loss[:3]
-        val_losses[i-1] = val_loss[:3]
-        ious[i-1] = [avg_iou, val_avg_iou]
+        # val_losses[i-1] = val_loss[:3]
+        # ious[i-1] = [avg_iou, val_avg_iou]
+        train_ious[i-1] = avg_iou
+        # train_des[i-1] = avg_de
 
-        # Save weights / Log loss every epoch
+        # Evaluate on validation / Save weights / Log loss every epoch
         if not i % steps_per_epoch:
-            K.set_learning_phase(0) # 0 = test
+            K.set_learning_phase(0)
             epoch = i // steps_per_epoch
 
+            # Evaluate on validation set
+            val_loss = combined_model.test_on_batch(val_data_input, {'discriminator': np.random.uniform(low=0.999, high=1.0, size=len(val_data_target)),
+                                                                     'generator': val_data_target})
+            
+            # val_batch_ious = np.empty(len(y_preds))
+            # val_batch_des = np.empty(len(y_preds))
+            # for i in range(len(val_loss[4])):
+            #     batch_ious[i], batch_des[i] = calc_metrics(val_data_input[i][-4:], val_data_target[i], val_loss[4][i])
+            
+            # val_avg_iou = np.mean(batch_ious)
+            # val_avg_de = np.mean(batch_des)
+            val_avg_iou = np.mean([get_IoU(val_data_input[i][-4:], val_data_target[i], val_loss[4][i]) for i in range(len(val_loss[4]))])
+            val_losses[epoch-1] = val_loss[:3]
+            val_ious[epoch-1] = val_avg_iou
+            # val_des[epoch-1] = val_avg_de
+
+            # Evaluate discriminator predictions
             a_g_p, a_r_p = test_discrim(train_data, generator_model, discriminator_model, combined_model)
             avg_gen_pred.append(a_g_p)
             avg_real_pred.append(a_r_p)
 
+            # Log loss info to console / file
             print('Epoch: {} of {}'.format(epoch, nb_steps // steps_per_epoch))
             print('D_losses: {}'.format(D_losses[i-1]))
             print('G_losses: {}'.format(G_losses[i-1]))
-            print('val_losses: {}'.format(val_losses[i-1]))
-            print('ious: {}'.format(ious[i-1]))
+            print('val_losses: {}'.format(val_losses[epoch-1]))
+            print('ious: {}, {}'.format(train_ious[i-1], val_ious[epoch-1]))
+            print('des: {}, {}'.format(train_des[i-1], val_des[epoch-1]))
             print('avg_gen_pred: {} | avg_real_pred: {}\n'.format(a_g_p, a_r_p))
 
             lossFile.write('Epoch: {} of {}.\n'.format(epoch, nb_steps // steps_per_epoch))
-            lossFile.write('D_losses: {}'.format(D_losses[i-1]))
-            lossFile.write('G_losses: {}'.format(G_losses[i-1]))
-            lossFile.write('val_losses: {}'.format(val_losses[i-1]))
-            lossFile.write('avg_gen_pred: {} | avg_real_pred: {}\n'.format(a_g_p, a_r_p))
+            lossFile.write('D_losses: {}\n'.format(D_losses[i-1]))
+            lossFile.write('G_losses: {}\n'.format(G_losses[i-1]))
+            lossFile.write('val_losses: {}\n'.format(val_losses[epoch-1]))
+            lossFile.write('ious: {}, {}\n'.format(train_ious[i-1], val_ious[epoch-1]))
+            lossFile.write('des: {}, {}\n'.format(train_des[i-1], val_des[epoch-1]))
+            lossFile.write('avg_gen_pred: {} | avg_real_pred: {}\n\n'.format(a_g_p, a_r_p))
 
             # Checkpoint: Save model weights
             model_checkpoint_base_name = output_dir + 'weights\\{}_weights_epoch-{}.h5'
             generator_model.save_weights(model_checkpoint_base_name.format('gen', epoch))
             discriminator_model.save_weights(model_checkpoint_base_name.format('discrim', epoch))
 
-    return [G_losses, D_losses, val_losses, ious, avg_gen_pred, avg_real_pred]
+    return [G_losses, D_losses, val_losses, train_ious, val_ious, train_des, val_des, avg_gen_pred, avg_real_pred]
 
-def get_model(data_cols, generator_model_path=None, discriminator_model_path=None, loss_pickle_path=None, seed=0, optimizer=None):
+def get_model(data_cols, generator_model_path=None, discriminator_model_path=None, loss_pickle_path=None, seed=0, optimizer=None, w_adv=0.5):
+    assert (w_adv >=0 and w_adv <= 1), "w_adv must be in range [0..1]"
     discrim_input_dim = len(data_cols)
     gen_input_dim = 40
     base_n_count = 128
@@ -197,16 +225,17 @@ def get_model(data_cols, generator_model_path=None, discriminator_model_path=Non
     if optimizer and optimizer['name']=='adam':
         adam = optimizers.Adam(lr=optimizer['lr'], beta_1=optimizer['beta_1'], beta_2=optimizer['beta_2'], decay=optimizer['decay'])
     else:
-        adam = optimizers.Adam()
+        raise Exception('Must specify optimizer.')
 
     # G.compile(optimizer=adam, loss='binary_crossentropy')
     D.compile(optimizer=adam, loss='binary_crossentropy')
     print(D.summary())
     D.trainable = False  # Freeze discriminator weights in combined model (we want to improve model by improving generator, rather than making the discriminator worse)
     C.compile(optimizer=adam, loss={'discriminator': 'binary_crossentropy', 'generator': smoothL1},
-              loss_weights={'discriminator': 0.5, 'generator': 0.5})
+              loss_weights={'discriminator': w_adv, 'generator': (1 - w_adv)})
 
     # Add model outputs to return values
+    # output will now be: [g_loss, g_loss_adv, smooth_l1, d_output, g_output]
     C.metrics_tensors += C.outputs
 
     if show:

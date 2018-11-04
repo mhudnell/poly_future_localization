@@ -33,6 +33,47 @@ set_dimensions = {
         '0020': (376, 1241, 3),
 }
 
+kitti_raw_map = [
+    '2011_09_26_drive_0001_sync',
+    '2011_09_26_drive_0002_sync',
+    '2011_09_26_drive_0005_sync',
+    '2011_09_26_drive_0009_sync',
+    '2011_09_26_drive_0011_sync',
+    '2011_09_26_drive_0013_sync',
+    '2011_09_26_drive_0014_sync',
+    '2011_09_26_drive_0015_sync',
+    '2011_09_26_drive_0017_sync',
+    '2011_09_26_drive_0018_sync',
+    '2011_09_26_drive_0019_sync',
+    '2011_09_26_drive_0020_sync',
+    '2011_09_26_drive_0022_sync',
+    '2011_09_26_drive_0023_sync',
+    '2011_09_26_drive_0027_sync',
+    '2011_09_26_drive_0028_sync',
+    '2011_09_26_drive_0029_sync',
+    '2011_09_26_drive_0032_sync',
+    '2011_09_26_drive_0035_sync',
+    '2011_09_26_drive_0036_sync',
+    '2011_09_26_drive_0039_sync',
+    '2011_09_26_drive_0046_sync',
+    '2011_09_26_drive_0048_sync',
+    '2011_09_26_drive_0051_sync',
+    '2011_09_26_drive_0052_sync',
+    '2011_09_26_drive_0056_sync',
+    '2011_09_26_drive_0057_sync',
+    '2011_09_26_drive_0059_sync',
+    '2011_09_26_drive_0060_sync',
+    '2011_09_26_drive_0061_sync',
+    '2011_09_26_drive_0064_sync',
+    '2011_09_26_drive_0070_sync',
+    '2011_09_26_drive_0079_sync',
+    '2011_09_26_drive_0084_sync',
+    '2011_09_26_drive_0086_sync',
+    '2011_09_26_drive_0087_sync',
+    '2011_09_26_drive_0091_sync',
+    '2011_09_26_drive_0093_sync'
+]
+
 # def getLineCounts_1obj():
 #     """Check that all 'past' data files have 10 lines, and 'future' data files have 11 lines."""
 #     total_past_count = 0
@@ -154,7 +195,7 @@ def get_kitti_data(sets, normalize=True, transform=True):
     bounding box stores 4 floats (left, top, width, height). The 11th bounding box is the 'target'
 
     Returns:
-        samples (ndarray (ndim: 3)):
+        samples (ndarray (ndim: 3)): (m, 11, 4)
     """
     samples = []
     samples_info = []  # (sample set, frame number)
@@ -190,16 +231,20 @@ def get_kitti_data(sets, normalize=True, transform=True):
                             object_queue = object_queues[object_id]
                             object_queue.append(bb)
 
-                            if len(object_queue) >= 15:  # => Can create a sample
-                                if len(object_queue) == 16:
+                            # if len(object_queue) >= 15:  # have 1.5sec of continuous info=> Can create a sample
+                            #     if len(object_queue) == 16:
+                            if len(object_queue) >= 20:  # have 2.0sec of continuous info=> Can create a sample
+                                if len(object_queue) == 21:
                                     object_queue.popleft()
                                 sample = []
                                 for i in range(10):
                                     sample.append(object_queue[i])
                                 if transform:
-                                    target = get_transformation(object_queue[9], object_queue[14])
+                                    # target = get_transformation(object_queue[9], object_queue[14])
+                                    target = get_transformation(object_queue[9], object_queue[19])
                                 else:
-                                    target = object_queue[14]
+                                    raise Exception('should not happen.')
+                                    # target = object_queue[14]
                                 sample.append(target)  # Append the target box (or transformation)
                                 samples.append(sample)
                                 samples_info.append((sample_set_name, str(frame_number).zfill(6), object_id))
@@ -210,6 +255,80 @@ def get_kitti_data(sets, normalize=True, transform=True):
                     object_last_seen[object_id] = frame_number  # Update last seen frame for this object
 
         return np.asarray(samples), samples_info
+
+def get_kitti_raw_tracklets(sets=None, normalize=True, transform=True):
+    """
+    Parse kitti label files and construct a set of samples. Each sample has 11 'bounding boxes', where each
+    bounding box stores 4 floats (left, top, width, height). The 11th bounding box is the 'target'
+
+    Arguments:
+        sets: [set of integers; range: 0-37] if specified, only retrieve these sets
+    Returns:
+        samples (ndarray (ndim: 3)): (m, 11, 4)
+    """
+    samples = []
+    samples_info = []  # (sample set, frame number)
+
+    root = "F:\\Car data\\kitti\\data_raw_with_tracklets\\2011_09_26"
+    for i, seq in enumerate(os.listdir(root)):
+        # print(i, seq)
+        seq_dir = os.path.join(root, seq)
+        if not os.path.isdir(seq_dir) or (sets is not None and i not in sets):
+            continue
+        # print(seq_dir)
+
+        tracklet_path = os.path.join(seq_dir, "2d_tracklet_filtered.txt")
+        object_queues = {}  # Contains a queue (of bounding boxes) with max size 15 for each object id in the file
+        object_last_seen = {}  # Key: Object ids; Value: Last seen frame for the given object
+
+        with open(tracklet_path) as f:
+            for line in f:
+                words = line.split()
+                frame_number = int(words[0])
+                object_id = words[1]
+
+                if words[2] == "DontCare":
+                    continue
+
+                L = float(words[6])
+                T = float(words[7])
+                R = float(words[8])
+                B = float(words[9])
+                w = R - L
+                h = B - T
+                cx = (L + R)/2
+                cy = (T + B)/2
+                bb = [cx/1242, cy/375, w/1242, h/375] if normalize else [cx, cy, w, h]
+
+                if object_id in object_last_seen and object_last_seen[object_id] == frame_number - 1:  # Object has been seen previously AND the object was seen in the previous frame
+                    object_queue = object_queues[object_id]
+                    object_queue.append(bb)
+
+                    # if len(object_queue) >= 15:  # have 1.5sec of continuous info=> Can create a sample
+                    #     if len(object_queue) == 16:
+                    if len(object_queue) >= 20:  # have 2.0sec of continuous info=> Can create a sample
+                        if len(object_queue) == 21:
+                            object_queue.popleft()
+                        sample = []
+                        for i in range(10):
+                            sample.append(object_queue[i])
+                        if transform:
+                            # target = get_transformation(object_queue[9], object_queue[14])
+                            target = get_transformation(object_queue[9], object_queue[19])
+                        else:
+                            print('should not happen')
+                            raise ValueError('should not happen.')
+                            # target = object_queue[14]
+                        sample.append(target)  # Append the target box (or transformation)
+                        samples.append(sample)
+                        samples_info.append((seq_dir, str(frame_number).zfill(10), object_id))
+
+                else:
+                    object_queues[object_id] = deque([bb])  # Reset / create a new queue of bounding boxes for this object
+
+                object_last_seen[object_id] = frame_number  # Update last seen frame for this object
+
+    return np.asarray(samples), samples_info
 
 def get_epoch(samples, batch_size, seed=0):
     """
@@ -358,14 +477,24 @@ if __name__ == '__main__':
     # print(batch)
     # print(batch[:, :4*10])
 
-    samples_train, _ = get_kitti_training(normalize=True)
+    # samples_train, _ = get_kitti_training(normalize=True)
+    
     # print(samples)
-    print("shape: ", samples_train.shape)
+    # print("shape: ", samples_train.shape)
     # print("ndim: ", samples.ndim)
     # print("dtype: ", samples.dtype)
 
-    samples_test, _ = get_kitti_testing(normalize=True)
-    print("shape: ", samples_test.shape)
+    # samples_test, _ = get_kitti_testing(normalize=True)
+    # print("shape: ", samples_test.shape)
 
     # epoch = get_epoch(samples, 128)
     # print("epoch shape:", epoch.shape)
+
+    samples, samples_info = get_kitti_raw_data()
+
+    print(samples[0])
+    print(samples_info[0])
+    # for s in samples:
+    #     print(s)
+
+    # print(samples_info)

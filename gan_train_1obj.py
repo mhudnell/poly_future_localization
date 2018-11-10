@@ -10,7 +10,7 @@ def log_hyperparams(model_name=None, output_dir=None, train_sets=None, val_sets=
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    log_file = open(output_dir + 'hyperparameters.txt', 'w')
+    log_file = open(os.path.join(output_dir, 'hyperparameters.txt'), 'w')
     print('Logging hyperparameters:', file=log_file)
     print('  --model_name: {}'.format(model_name), file=log_file)
     print('  --output_dir: {}'.format(output_dir), file=log_file)
@@ -59,7 +59,7 @@ def plot_loss(model_name, epochs, nb_steps, steps_per_epoch, output_dir, G_losse
     plt.ylabel('loss value', fontsize=16)
 
     plt.tight_layout()
-    plt.savefig(output_dir + 'loss_plot.png')
+    plt.savefig(os.path.join(output_dir, 'loss_plot.png'))
     # plt.show()
 
     # PLOT DISCRIM PREDICTIONS
@@ -74,12 +74,12 @@ def plot_loss(model_name, epochs, nb_steps, steps_per_epoch, output_dir, G_losse
     plt.xlabel('epoch', fontsize=18)
     plt.ylabel('avg prediction', fontsize=16)
 
-    plt.savefig(output_dir + 'discrim_prediction_plot.png')
+    plt.savefig(os.path.join(output_dir, 'discrim_prediction_plot.png'))
 
 def save_losses(output_dir, val_losses, val_ious, val_des):
     # Make loss dir
-    if not os.path.exists(output_dir + 'losses\\'):
-        os.makedirs(output_dir + 'losses\\')
+    if not os.path.exists(os.path.join(output_dir, 'losses')):
+        os.makedirs(os.path.join(output_dir, 'losses'))
 
     # Save losses
     # with open(output_dir+'losses\\G_loss.pkl', 'wb') as f:
@@ -95,9 +95,9 @@ def save_losses(output_dir, val_losses, val_ious, val_des):
     # with open(output_dir+'losses\\avg_real_pred.pkl', 'wb') as f:
     #     pickle.dump(avg_real_pred, f)
 
-    with open(output_dir + 'losses\\val_losses.pkl', 'wb') as f:
+    with open(os.path.join(output_dir, 'losses', 'val_losses.pkl'), 'wb') as f:
         pickle.dump(val_losses, f)
-    with open(output_dir + 'losses\\val_ious.pkl', 'wb') as f:
+    with open(os.path.join(output_dir, 'losses', 'val_ious.pkl'), 'wb') as f:
         pickle.dump(val_ious, f)
     # with open(output_dir + 'losses\\val_des.pkl', 'wb') as f:
     #     pickle.dump(val_des, f)
@@ -128,7 +128,10 @@ def train_single(model_specs, train_sets, val_sets, dataset='kitti_tracking'):
                     dataset=dataset)
 
     # Get Model
-    generator_model, discriminator_model, combined_model = gan_1obj.get_model(data_cols, optimizer=optimizer, w_adv=w_adv)
+    poly_order = 3
+    timepoints = np.linspace(0.1, 1.0, 10)
+    generator_model, discriminator_model, combined_model = gan_1obj.get_model(
+        data_cols, poly_order, timepoints, optimizer=optimizer, w_adv=w_adv)
     print("metrics_names:", combined_model.metrics_names)
 
     # Train Model
@@ -169,7 +172,7 @@ def train_k_fold(k, model_specs, dataset='kitti_tracking', seed=6):
     all_smoothl1 = np.empty((k, epochs))
     all_ious = np.empty((k, epochs))
     for i in range(k):
-        model_specs[-1] = output_dir + 'fold-' + str(i) + '\\'
+        model_specs[-1] = output_dir + 'fold-' + str(i) + '/'
 
         train_sets = np.setdiff1d(remaining, validation_groups[i])
         [val_losses, val_ious] = train_single(model_specs, train_sets, validation_groups[i], dataset=dataset)
@@ -189,7 +192,7 @@ def train_k_fold(k, model_specs, dataset='kitti_tracking', seed=6):
     print("  -- mean iou:", avgs_iou[max_iou_idx])
     print("  -- individual ious:", all_ious[:, max_iou_idx])
 
-    resultsFile = open(output_dir + 'results.txt', 'w')
+    resultsFile = open(os.path.join(output_dir, 'results.txt'), 'w')
     resultsFile.write("Epoch for optimal smoothL1: {}\n".format(min_smoothl1_idx + 1))
     resultsFile.write("  -- mean smoothL1: {}\n".format(avgs_smoothl1[min_smoothl1_idx]))
     resultsFile.write("  -- individual smoothL1s: {}\n".format(all_smoothl1[:, min_smoothl1_idx]))
@@ -199,7 +202,7 @@ def train_k_fold(k, model_specs, dataset='kitti_tracking', seed=6):
 
 def train_k_fold_joint(k, model_specs, dataset='kitti_tracking', seed=6, stopping_epoch=None):
     output_dir = model_specs[-1]
-    model_specs[-1] = output_dir + 'joint' + '\\'
+    model_specs[-1] = output_dir + 'joint' + '/'
 
     np.random.seed(seed)
     if dataset == 'kitti_tracking':
@@ -271,6 +274,7 @@ if __name__ == '__main__':
     # model_name = 'maxGAN_SHOW-D-LEARN_1s-pred_G6-64_D3-32_w-adv{}_{}-lr{}-b1{}-b2{}_bs{}_kd{}_kg{}_epochs{}'.format(
     #     w_adv, optimizer['name'], optimizer['lr'], optimizer['beta_1'], optimizer['beta_2'], batch_size, k_d, k_g, epochs
     #     )
+    # TODO (True): change output directory
     output_dir = 'C:\\Users\\Max\\Research\\maxGAN\\models\\'+model_name+'\\'
     show = True
 

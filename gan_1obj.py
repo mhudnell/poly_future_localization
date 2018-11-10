@@ -31,7 +31,11 @@ def smoothL1(y_true, y_pred):
 # def combined_loss(y_true, y_pred, a=0.5, b=0.5):
 #     return a*losses.binary_crossentropy(y_true, y_pred) + b*smoothL1(y_true, y_pred)
 
-def generator_network(x, discrim_input_dim, base_n_count):
+# poly_order: highest degree on x in the polynomial (e.g., t^2 + t => 2)
+# timepoints: list of future timepoints (offset from current) at which to
+#   produce outputs
+# returns: Bx4xT Tensor, with batch size B, 4 parameters, and T timepoints
+def generator_network(x, discrim_input_dim, base_n_count, poly_order, timepoints):
     # x = layers.Dense(base_n_count)(x)
     x = layers.Dense(64, activation="relu")(x)
     # x = layers.LeakyReLU(0.1)(x)
@@ -41,11 +45,16 @@ def generator_network(x, discrim_input_dim, base_n_count):
     # x = layers.Dense(base_n_count*4)(x)
     x = layers.Dense(64, activation="relu")(x)
     # x = layers.LeakyReLU(0.1)(x)
-    x = layers.Dense(64, activation="relu")(x)
-    x = layers.Dense(64, activation="relu")(x)
-    x = layers.Dense(64, activation="relu")(x)
-    x = layers.Dense(4, activation="linear", name="g_output")(x)
-    return x
+#    x = layers.Dense(64, activation="relu")(x)
+#    x = layers.Dense(64, activation="relu")(x)
+#    x = layers.Dense(64, activation="relu")(x)
+#    x = layers.Dense(4, activation="linear", name="g_output")(x)
+    coeffs = layers.Dense(4 * poly_order, activation="linear", name="coeffs")(x)
+    coeffs = layers.Reshape(4, poly_order)(coeffs)
+    timepoints = K.constant(
+        [[pow(t, i) for t in timepoints] for i in range(1, poly_order + 1)])
+    output_op = layers.Lambda(lambda x: K.dot(x, timepoints))
+    return output_op(coeffs)
 
 def discriminator_network(x, discrim_input_dim, base_n_count):
     # x = layers.Dense(base_n_count*4)(x)
@@ -60,9 +69,11 @@ def discriminator_network(x, discrim_input_dim, base_n_count):
     x = layers.Dense(1, activation="sigmoid")(x)
     return x
 
-def define_models_GAN(gen_input_dim, discrim_input_dim, base_n_count, type=None):
+def define_models_GAN(gen_input_dim, discrim_input_dim, base_n_count,
+                      poly_order, timepoints):
     G_input = layers.Input(shape=(gen_input_dim, ), name="g_input")
-    G_output = generator_network(G_input, discrim_input_dim, base_n_count)
+    G_output = generator_network(
+        G_input, discrim_input_dim, base_n_count, poly_order, timepoints)
 
     D_input = layers.Input(shape=(discrim_input_dim,))
     D_output = discriminator_network(D_input, discrim_input_dim, base_n_count)
@@ -210,7 +221,7 @@ def training_steps_GAN(train_data, train_data_info, val_data, val_data_info, mod
 
     return [G_losses, D_losses, val_losses, train_ious, val_ious, train_des, val_des, avg_gen_pred, avg_real_pred]
 
-def get_model(data_cols, generator_model_path=None, discriminator_model_path=None, loss_pickle_path=None, seed=0, optimizer=None, w_adv=0.5):
+def get_model(data_cols, poly_order, timepoints, generator_model_path=None, discriminator_model_path=None, loss_pickle_path=None, seed=0, optimizer=None, w_adv=0.5):
     assert (w_adv >=0 and w_adv <= 1), "w_adv must be in range [0..1]"
     discrim_input_dim = len(data_cols)
     gen_input_dim = 40
@@ -219,7 +230,8 @@ def get_model(data_cols, generator_model_path=None, discriminator_model_path=Non
 
     # Define network models.
     K.set_learning_phase(1)  # 1 = train
-    G, D, C = define_models_GAN(gen_input_dim, discrim_input_dim, base_n_count)
+    G, D, C = define_models_GAN(
+        gen_input_dim, discrim_input_dim, base_n_count, poly_order, timepoints)
 
     # adam = optimizers.Adam(lr=lr, beta_1=0.5, beta_2=0.999)
     if optimizer and optimizer['name']=='adam':

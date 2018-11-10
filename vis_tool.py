@@ -1,8 +1,9 @@
 import cv2
 import numpy as np
 import data_extract_1obj
+import os
 
-def drawFrameRects(sample_set, frame, objId, bb, isGen, folder_dir, dataset='kitti_tracking', display=False):
+def drawFrameRects(sample_set, frame, objId, bb_orig, isGen, folder_dir, dataset='kitti_tracking', display=False, anchor_frame=False):
     '''
     Draws the provided bounding boxes onto the specified frame and outputs the drawn image to 'folder_dir'.
 
@@ -14,13 +15,21 @@ def drawFrameRects(sample_set, frame, objId, bb, isGen, folder_dir, dataset='kit
         isGen (boolean): Indicates whether the concluding bounding box in 'bb' was generated, or if it is the target.
         folder_dir: The folder to output the drawn images to.
     '''
-    print(sample_set)
+    bb = np.copy(bb_orig)
+    # print(sample_set)
+
+    if anchor_frame:
+        frame_num = int(frame)
+        anchor_frame_num = frame_num - 10
+        frame = str(anchor_frame_num).zfill(10)
+
     if dataset == 'kitti_raw':
-        img_file = sample_set + '\\image_02\\data\\' + frame + '.png'
+        # img_file = sample_set + '\\image_02\\data\\' + frame + '.png'
+        img_file = 'F:\\Car data\\kitti\\data_tracking\\training\\image_02\\' + sample_set + '\\' + frame + '.png'
     elif dataset == 'kitti_raw_tracklets':
         img_file = sample_set + '\\image_02\\data\\' + frame + '.png'
     else:
-        img_file = 'F:\\Car data\\kitti\\data_tracking\\training\\image_02\\' + sample_set + '\\' + frame + '.png'
+        raise Exception("`dataset` parameter must be one of: ['kitti_tracking', 'kitti_raw_tracklets']")
 
     print(img_file)
     # Load img to draw on.
@@ -53,14 +62,20 @@ def drawFrameRects(sample_set, frame, objId, bb, isGen, folder_dir, dataset='kit
         bb_int[i][3] = int(float(nums[3]))
 
     # Draw target box in green if ground truth, blue if generated (color is specified in (b,g,r) format)
-    target_color = (255, 0, 0) if isGen else (0, 255, 0)
+    # target_color = (255, 0, 0) if isGen else (0, 255, 0)
 
     # Draw each bounding box on the image.
     for i in range(len(bb_int)):
-        if i < 10:
-            img = cv2.rectangle(img, (bb_int[i][0], bb_int[i][1]), (bb_int[i][0] + bb_int[i][2], bb_int[i][1] + bb_int[i][3]), (61, 165, 244, 0.5), 5)     # draw past frames in orange
-        else:
-            img = cv2.rectangle(img, (bb_int[i][0], bb_int[i][1]), (bb_int[i][0] + bb_int[i][2], bb_int[i][1] + bb_int[i][3]), target_color, 5)            # draw future frame in color: 'target_color'
+        if i < 9:       # Color for prior bbs
+            if i % 3 != 0:
+                continue
+            color = (255, 102, 153)
+        elif i == 9:   # Color for anchor box
+            color = (102, 224, 225)
+        else:           # Color for prediction / ground truth
+            color = (255, 0, 0) if isGen else (0, 255, 0)
+        
+        img = cv2.rectangle(img, (bb_int[i][0], bb_int[i][1]), (bb_int[i][0] + bb_int[i][2], bb_int[i][1] + bb_int[i][3]), color, 2)
 
     # Write image to file.
     suffix = "generated" if isGen else "target"
@@ -69,14 +84,15 @@ def drawFrameRects(sample_set, frame, objId, bb, isGen, folder_dir, dataset='kit
         cv2.imshow('ImageWindow', img)
         cv2.waitKey()
     else:
-        cv2.imwrite(folder_dir + sample_set + '_' + frame + '_' + objId + '_' + suffix + '.png', img)
+        # cv2.imwrite(folder_dir + sample_set + '_' + frame + '_' + objId + '_' + suffix + '.png', img)
+        cv2.imwrite(os.path.join(folder_dir, frame + '_' + objId + '_' + suffix + '.png'), img)
 
     return
 
 class Rect:
     def __init__(self, l, t, r, b):
-        assert (l < r), "l should be less than r"
-        assert (t < b), "t should be less than b"
+        assert (l <= r), "l not greater than r"
+        assert (t <= b), "t not greater than b"
 
         self.l = l
         self.t = t
@@ -115,13 +131,13 @@ class Rect:
 
     @staticmethod
     def get_IoU(rect1, rect2):
-        intersect = Rect.get_intersection(target, generated)
+        intersect = Rect.get_intersection(rect1, rect2)
         if intersect:
-            iou = intersect.area / (target.area + generated.area - intersect.area)
+            iou = intersect.area / (rect1.area + rect2.area - intersect.area)
             assert (iou > 0), "Non-positive IoU!"
             return iou
         return 0
-    
+
     @staticmethod
     def get_DE(rect1, rect2):
         c1 = np.array([(rect1.l + rect1.r)/2, (rect1.t + rect1.b)/2])
@@ -129,7 +145,10 @@ class Rect:
         return np.linalg.norm(c1 - c2)
 
 
-def get_IoU(anchor, target_transform, generated_transform, sample_set=None):
+def get_IoU(anchor, target_transform, generated_transform, sample_set=None, dataset='kitti_tracking'):
+    if dataset == 'kitti_raw_tracklets':
+        sample_set = None
+
     t_bb = data_extract_1obj.transform(anchor, target_transform)
     g_bb = data_extract_1obj.transform(anchor, generated_transform)
     t_bb = data_extract_1obj.unnormalize_bb(t_bb, sample_set=sample_set)
@@ -159,7 +178,7 @@ def calc_metrics(anchor, target_transform, generated_transform, sample_set=None)
     iou = Rect.get_IoU(target, generated)
     de = Rect.get_DE(target, generated)
 
-    return [iou, de]
+    return iou, de
 
 
 if __name__ == '__main__':
@@ -171,13 +190,14 @@ if __name__ == '__main__':
     # print(samples.shape)
     # print(len(samples_info))
 
-    # x = samples[0]
-    # x_info = samples_info[0]
-    # print(x)
-    # print(x_info)
+    x = samples[0]
+    x_info = samples_info[0]
+    print(x)
+    print(x_info)
 
     # drawFrameRects(x_info[0], x_info[1], x_info[2], x, False, None, dataset='kitti_raw', display=True)
-    # drawFrameRects(x_info[0], x_info[1], x_info[2], x, False, None, dataset='kitti_raw_tracklets', display=True)
+    drawFrameRects(x_info[0], x_info[1], x_info[2], x, False, None, dataset='kitti_raw_tracklets', display=True)
+    drawFrameRects(x_info[0], x_info[1], x_info[2], x, True, None, dataset='kitti_raw_tracklets', display=True)
 
     # View multiple
     # for i in range(5):

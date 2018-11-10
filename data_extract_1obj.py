@@ -256,7 +256,7 @@ def get_kitti_data(sets, normalize=True, transform=True):
 
         return np.asarray(samples), samples_info
 
-def get_kitti_raw_tracklets(sets=None, normalize=True, transform=True):
+def get_kitti_raw_tracklets(sets=None, normalize=True, transform=True, use_occluded=True):
     """
     Parse kitti label files and construct a set of samples. Each sample has 11 'bounding boxes', where each
     bounding box stores 4 floats (left, top, width, height). The 11th bounding box is the 'target'
@@ -286,8 +286,13 @@ def get_kitti_raw_tracklets(sets=None, normalize=True, transform=True):
                 words = line.split()
                 frame_number = int(words[0])
                 object_id = words[1]
+                object_class = words[2]
 
-                if words[2] == "DontCare":
+                if (not use_occluded) and (words[4] not in ['0', '1']):
+                    continue
+                
+                # Add classes to include all vehicles, or pedestrians.
+                if object_class not in ['Car']:     # , 'Van', 'Truck', 'Cyclist'       # 'Pedestrian'
                     continue
 
                 L = float(words[6])
@@ -312,16 +317,17 @@ def get_kitti_raw_tracklets(sets=None, normalize=True, transform=True):
                         sample = []
                         for i in range(10):
                             sample.append(object_queue[i])
+                            
                         if transform:
                             # target = get_transformation(object_queue[9], object_queue[14])
                             target = get_transformation(object_queue[9], object_queue[19])
                         else:
-                            print('should not happen')
-                            raise ValueError('should not happen.')
                             # target = object_queue[14]
+                            raise Exception('should not happen.')
+                            
                         sample.append(target)  # Append the target box (or transformation)
                         samples.append(sample)
-                        samples_info.append((seq_dir, str(frame_number).zfill(10), object_id))
+                        samples_info.append((seq_dir, str(frame_number).zfill(10), object_id, object_class))
 
                 else:
                     object_queues[object_id] = deque([bb])  # Reset / create a new queue of bounding boxes for this object
@@ -456,10 +462,14 @@ def get_transformation(anchor, target):
 def transform(anchor, t):
     """Apply transformation t to anchor box to get a proposal box."""
     proposal = np.empty(4)
-    proposal[0] = anchor[2]*t[0] + anchor[0]
-    proposal[1] = anchor[3]*t[1] + anchor[1]
-    proposal[2] = anchor[2]*exp(t[2])
-    proposal[3] = anchor[3]*exp(t[3])
+    try:
+        proposal[0] = anchor[2]*t[0] + anchor[0]
+        proposal[1] = anchor[3]*t[1] + anchor[1]
+        proposal[2] = anchor[2]*exp(t[2])
+        proposal[3] = anchor[3]*exp(t[3])
+    except OverflowError as err:
+        print('Overflowed after ', t, err)
+        proposal = np.zeros(4)
     return proposal
 
 def center_to_topleft_bb(bb):
@@ -485,15 +495,17 @@ if __name__ == '__main__':
     # print("dtype: ", samples.dtype)
 
     # samples_test, _ = get_kitti_testing(normalize=True)
-    # print("shape: ", samples_test.shape)
+    
 
     # epoch = get_epoch(samples, 128)
     # print("epoch shape:", epoch.shape)
 
-    samples, samples_info = get_kitti_raw_data()
+    # samples, samples_info = get_kitti_raw_data()
+    samples, samples_info = get_kitti_raw_tracklets(use_occluded=True)
 
-    print(samples[0])
-    print(samples_info[0])
+    print("shape: ", samples.shape)
+    # print(samples[0])
+    # print(samples_info[0])
     # for s in samples:
     #     print(s)
 

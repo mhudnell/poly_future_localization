@@ -36,18 +36,14 @@ def smoothL1(y_true, y_pred):
 #   produce outputs
 # returns: Bx4xT Tensor, with batch size B, 4 parameters, and T timepoints
 def generator_network(x, discrim_input_dim, base_n_count, poly_order, timepoints):
-    # x = layers.Dense(base_n_count)(x)
+    # Feedforward Net
     x = layers.Dense(64, activation="relu")(x)
-    # x = layers.LeakyReLU(0.1)(x)
-    # x = layers.Dense(base_n_count*2)(x)
     x = layers.Dense(64, activation="relu")(x)
-    # x = layers.LeakyReLU(0.1)(x)
-    # x = layers.Dense(base_n_count*4)(x)
     x = layers.Dense(64, activation="relu")(x)
-    # x = layers.LeakyReLU(0.1)(x)
-#    x = layers.Dense(64, activation="relu")(x)
-#    x = layers.Dense(64, activation="relu")(x)
-#    x = layers.Dense(64, activation="relu")(x)
+    # x = layers.Dense(64, activation="relu")(x)
+    # x = layers.Dense(64, activation="relu")(x)
+    # x = layers.Dense(64, activation="relu")(x)
+
 #    x = layers.Dense(4, activation="linear", name="g_output")(x)
     coeffs = layers.Dense(4 * poly_order, activation="linear", name="coeffs")(x)
     coeffs = layers.Reshape(4, poly_order)(coeffs)
@@ -57,16 +53,30 @@ def generator_network(x, discrim_input_dim, base_n_count, poly_order, timepoints
     return output_op(coeffs)
 
 def discriminator_network(x, discrim_input_dim, base_n_count):
-    # x = layers.Dense(base_n_count*4)(x)
+
+    # x = layers.Dense(32)(x)
+    # # x = layers.BatchNormalization(momentum=0.9)(x)
+    # x = layers.LeakyReLU()(x)
+    # # x = layers.Activation('relu')(x)
+    # x = layers.Dense(32)(x)
+    # # x = layers.BatchNormalization(momentum=0.9)(x)
+    # x = layers.LeakyReLU()(x)
+    # # x = layers.Activation('relu')(x)
+    # x = layers.Dense(32)(x)
+    # # x = layers.BatchNormalization(momentum=0.9)(x)
+    # x = layers.LeakyReLU()(x)
+    # # x = layers.Activation('relu')(x)
+
     x = layers.Dense(32, activation="relu")(x)
-    # x = layers.LeakyReLU(0.1)(x)
-    # x = layers.Dense(base_n_count*2)(x)
     x = layers.Dense(32, activation="relu")(x)
-    # x = layers.LeakyReLU(0.1)(x)
-    # x = layers.Dense(base_n_count)(x)
     x = layers.Dense(32, activation="relu")(x)
-    # x = layers.LeakyReLU(0.1)(x)
+
+    # x = layers.Dense(64, activation="relu")(x)
+    # x = layers.Dense(64, activation="relu")(x)
+    # x = layers.Dense(64, activation="relu")(x)
+
     x = layers.Dense(1, activation="sigmoid")(x)
+    # x = layers.Dense(1, activation="tanh")(x)
     return x
 
 def define_models_GAN(gen_input_dim, discrim_input_dim, base_n_count,
@@ -102,13 +112,13 @@ def training_steps_GAN(train_data, train_data_info, val_data, val_data_info, mod
     val_data_input = val_data.reshape((len(val_data), -1))[:, :10*4]
     val_data_target = val_data.reshape((len(val_data), -1))[:, -4:]
 
-    G_losses = np.empty((nb_steps, 3))
-    D_losses = np.empty((nb_steps, 3))
+    # Store loss values for returning.
+    G_losses = np.empty((nb_steps, 3))          # [g_loss, g_loss_adv, smoothL1]
+    D_losses = np.zeros((nb_steps, 3))          # [D_loss, D_loss_real, D_loss_fake]
     val_losses = np.empty((epochs, 3))
-    # ious = np.empty((nb_steps, 2))          # Stores train and val data
-    train_ious =  np.empty(nb_steps)
+    train_ious = np.empty(nb_steps)
     val_ious = np.empty(epochs)
-    train_des =  np.zeros(nb_steps)
+    train_des = np.zeros(nb_steps)
     val_des = np.zeros(epochs)
 
     # Store average discrim prediction for generated and real samples every epoch.
@@ -123,6 +133,22 @@ def training_steps_GAN(train_data, train_data_info, val_data, val_data_info, mod
         f.write(discriminator_model.to_json(indent=4))
     with open(output_dir+"G_model.json", "w") as f:
         f.write(generator_model.to_json(indent=4))
+
+    # # PRETRAIN D
+    # for i in range(10*steps_per_epoch):
+    #     batch = data_extract_1obj.get_batch(train_data, batch_size)
+    #     gen_input = batch[:, :10*4]  # Only keep first 10 bounding boxes for gen input (11th is the target)
+
+    #     g_z = generator_model.predict(gen_input)
+    #     g_z = np.concatenate((gen_input, g_z), axis=1)
+
+    #     ### TRAIN ON REAL (y = 1) w/ noise
+    #     discriminator_model.train_on_batch(batch, np.random.uniform(low=0.999, high=1.0, size=batch_size))      # 0.7, 1.2 GANs need noise to prevent loss going to zero
+
+    #     ### TRAIN ON GENERATED (y = 0) w/ noise
+    #     discriminator_model.train_on_batch(g_z, np.random.uniform(low=0.0, high=0.001, size=batch_size))    # 0.0, 0.3
+    #     if not i % steps_per_epoch:
+    #         print(i // steps_per_epoch)
 
     for i in range(1, nb_steps+1):  # range(1, nb_steps+1)
         K.set_learning_phase(1)
@@ -139,11 +165,12 @@ def training_steps_GAN(train_data, train_data_info, val_data, val_data_info, mod
             D_loss_real = discriminator_model.train_on_batch(batch, np.random.uniform(low=0.999, high=1.0, size=batch_size))      # 0.7, 1.2 GANs need noise to prevent loss going to zero
 
             ### TRAIN ON GENERATED (y = 0) w/ noise
-            D_loss_fake = discriminator_model.train_on_batch(g_z, np.random.uniform(low=0.0, high=0.001, size=batch_size))    # 0.0, 0.3
+            D_loss_fake = discriminator_model.train_on_batch(g_z, np.random.uniform(low=0.0, high=0.001, size=batch_size))    # SIGMIOD # 0.0, 0.3
+            # D_loss_fake = discriminator_model.train_on_batch(g_z, np.random.uniform(low=-1.0, high=-0.999, size=batch_size))    # TANH
             D_loss = 0.5 * np.add(D_loss_real, D_loss_fake)
 
         # Only keep most recent loss value (if k_d > 1)
-        D_losses[i-1] = np.array([D_loss, D_loss_real, D_loss_fake])
+        # D_losses[i-1] = np.array([D_loss, D_loss_real, D_loss_fake])
 
         # TRAIN GENERATOR on real inputs and outputs
         for _ in range(k_g):
@@ -156,20 +183,18 @@ def training_steps_GAN(train_data, train_data_info, val_data, val_data_info, mod
                                                                'generator': gen_target})
             y_preds = G_loss[4]
 
-            # batch_ious = np.empty(len(y_preds))
-            # batch_des = np.empty(len(y_preds))
-            # for i in range(len(y_preds)):
-            #     batch_ious[i], batch_des[i] = calc_metrics(gen_input[i][-4:], gen_target[i], y_preds[i])
-            
-            avg_iou = np.mean([get_IoU(gen_input[i][-4:], gen_target[i], y_preds[i]) for i in range(len(y_preds))])
-            # avg_iou = np.mean(batch_ious)
-            # avg_de = np.mean(batch_des)
+            batch_ious = np.empty(len(y_preds))
+            batch_des = np.empty(len(y_preds))
+            for j in range(len(y_preds)):
+                batch_ious[j], batch_des[j] = calc_metrics(gen_input[j][-4:], gen_target[j], y_preds[j])
+
+            # avg_iou = np.mean([get_IoU(gen_input[j][-4:], gen_target[j], y_preds[j]) for j in range(len(y_preds))])
+            avg_iou = np.mean(batch_ious)
+            avg_de = np.mean(batch_des)
 
         G_losses[i-1] = G_loss[:3]
-        # val_losses[i-1] = val_loss[:3]
-        # ious[i-1] = [avg_iou, val_avg_iou]
         train_ious[i-1] = avg_iou
-        # train_des[i-1] = avg_de
+        train_des[i-1] = avg_de
 
         # Evaluate on validation / Save weights / Log loss every epoch
         if not i % steps_per_epoch:
@@ -179,18 +204,28 @@ def training_steps_GAN(train_data, train_data_info, val_data, val_data_info, mod
             # Evaluate on validation set
             val_loss = combined_model.test_on_batch(val_data_input, {'discriminator': np.random.uniform(low=0.999, high=1.0, size=len(val_data_target)),
                                                                      'generator': val_data_target})
-            
-            # val_batch_ious = np.empty(len(y_preds))
-            # val_batch_des = np.empty(len(y_preds))
-            # for i in range(len(val_loss[4])):
-            #     batch_ious[i], batch_des[i] = calc_metrics(val_data_input[i][-4:], val_data_target[i], val_loss[4][i])
-            
-            # val_avg_iou = np.mean(batch_ious)
-            # val_avg_de = np.mean(batch_des)
-            val_avg_iou = np.mean([get_IoU(val_data_input[i][-4:], val_data_target[i], val_loss[4][i]) for i in range(len(val_loss[4]))])
+            y_preds = val_loss[4]
+
+            val_batch_ious = np.empty(len(y_preds))
+            val_batch_des = np.empty(len(y_preds))
+            for j in range(len(val_loss[4])):
+                val_batch_ious[j], val_batch_des[j] = calc_metrics(val_data_input[j][-4:], val_data_target[j], y_preds[j])
+                        # val_avg_iou = np.mean([get_IoU(val_data_input[i][-4:], val_data_target[i], val_loss[4][i]) for i in range(len(val_loss[4]))])
+
+            # Print first sample.
+            t_bb = data_extract_1obj.transform(val_data_input[0][-4:], val_data_target[0])
+            t_bb = data_extract_1obj.unnormalize_bb(t_bb, sample_set=None)
+            g_bb = data_extract_1obj.transform(val_data_input[0][-4:], y_preds[0])
+            g_bb = data_extract_1obj.unnormalize_bb(g_bb, sample_set=None)
+            print("proposal: ", g_bb)
+            print("target: ", t_bb)
+
+            val_avg_iou = np.mean(val_batch_ious)
+            val_avg_de = np.mean(val_batch_des)
+
             val_losses[epoch-1] = val_loss[:3]
             val_ious[epoch-1] = val_avg_iou
-            # val_des[epoch-1] = val_avg_de
+            val_des[epoch-1] = val_avg_de
 
             # Evaluate discriminator predictions
             a_g_p, a_r_p = test_discrim(train_data, generator_model, discriminator_model, combined_model)
@@ -239,12 +274,14 @@ def get_model(data_cols, poly_order, timepoints, generator_model_path=None, disc
     else:
         raise Exception('Must specify optimizer.')
 
-    # G.compile(optimizer=adam, loss='binary_crossentropy')
     D.compile(optimizer=adam, loss='binary_crossentropy')
+    # D.compile(optimizer=adam, loss='mse')   # TANH
     print(D.summary())
     D.trainable = False  # Freeze discriminator weights in combined model (we want to improve model by improving generator, rather than making the discriminator worse)
-    C.compile(optimizer=adam, loss={'discriminator': 'binary_crossentropy', 'generator': smoothL1},
+    C.compile(optimizer=adam, loss={'discriminator': 'binary_crossentropy', 'generator': smoothL1}, 
               loss_weights={'discriminator': w_adv, 'generator': (1 - w_adv)})
+    # C.compile(optimizer=adam, loss={'discriminator': 'mse', 'generator': smoothL1},     # TANH
+    #           loss_weights={'discriminator': w_adv, 'generator': (1 - w_adv)})
 
     # Add model outputs to return values
     # output will now be: [g_loss, g_loss_adv, smooth_l1, d_output, g_output]
@@ -268,60 +305,9 @@ def get_model(data_cols, poly_order, timepoints, generator_model_path=None, disc
 
     return G, D, C
 
-# def test_model(generator_model, discriminator_model, combined_model, model_name):
-#   """Test model on a hand-picked sample from the data set."""
-#   data_x, data_y, files_x, files_y = get_data()
 
-#   data_dir = 'C:\\Users\\Max\\Research\\maxGAN\\models\\'+model_name+'\\bounding box images\\'
-#   if not os.path.exists(data_dir):
-#     os.makedirs(data_dir)
-
-#   test_x_pretty = data_x[20000]
-#   test_y_pretty = data_y[20000]
-#   print("file_x: ", files_x[20000])
-#   print("file_x: ", files_y[20000])
-
-#   test_x = np.reshape(test_x_pretty, (1, -1))
-#   test_y = np.reshape(test_y_pretty, (1, -1))
-
-#   test_g_z = generator_model.predict(test_x)
-#   test_g_z = np.concatenate((test_x, test_g_z), axis=1)
-#   test_g_z_pretty = np.reshape(test_g_z, (11,4))
-
-#   dpred_real = discriminator_model.predict(test_y)
-#   dpred_gen = discriminator_model.predict(test_g_z)
-#   print("dpred_real: ", dpred_real," dpred_gen: ", dpred_gen)
-
-#   # Undo normalization.
-#   test_g_z_pretty[:,0] = test_g_z_pretty[:,0] * 1240  # L
-#   test_g_z_pretty[:,1] = test_g_z_pretty[:,1] * 374   # T
-#   test_g_z_pretty[:,2] = test_g_z_pretty[:,2] * 1240  # W
-#   test_g_z_pretty[:,3] = test_g_z_pretty[:,3] * 374   # H
-#   test_y_pretty[:,0] = test_y_pretty[:,0] * 1240
-#   test_y_pretty[:,1] = test_y_pretty[:,1] * 374
-#   test_y_pretty[:,2] = test_y_pretty[:,2] * 1240
-#   test_y_pretty[:,3] = test_y_pretty[:,3] * 374
-
-#   # # Log results.
-#   # realfile = open(data_dir+'real.txt', 'w')
-#   # genfile = open(data_dir+'gen.txt', 'w')
-#   # realfile.write("%s\n" % test_y_pretty[10])
-#   # genfile.write("%s\n" % test_g_z_pretty[10])
-
-#   # Draw Results.
-#   frames = ['000040.png']
-#   print("test_g_z_pretty: ",test_g_z_pretty)
-#   print("test_y_pretty: ",test_y_pretty)
-#   drawFrameRects('0016', frames[0], test_g_z_pretty, isGen=True, folder_dir=data_dir)
-#   drawFrameRects('0016', frames[0], test_y_pretty, isGen=False, folder_dir=data_dir)
-
-#   return
-
-
-def test_model_multiple(generator_model, discriminator_model, combined_model, model_name):
+def test_model_multiple(generator_model, discriminator_model, combined_model, model_name, samples, samples_info, dataset='kitti_tracking'):
     """Test model on a hand-picked set of samples from the data set."""
-    # samples, samples_info = data_extract_1obj.get_kitti_training(normalize=True)
-    samples, samples_info = data_extract_1obj.get_kitti_testing(normalize=True)
 
     data_dir = 'C:\\Users\\Max\\Research\\maxGAN\\models\\'+model_name+'\\bounding box images\\'
     if not os.path.exists(data_dir):
@@ -351,7 +337,7 @@ def test_model_multiple(generator_model, discriminator_model, combined_model, mo
         print("d_pred_real:", d_pred_real, "d_pred_gen:", d_pred_gen)
         print("generated_transform:", generated[-1])
         print("target_transform:", target[-1])
-        print("iou:", get_IoU(target[-2], target[-1], generated[-1], sample_set=sample_set))
+        print("iou:", get_IoU(target[-2], target[-1], generated[-1], sample_set=sample_set, dataset=dataset))
         # with tf.Session() as sess:
         #     print("smoothL1 loss:", sess.run(smoothL1(target[-1], generated[-1])), "\n")
 
@@ -360,8 +346,8 @@ def test_model_multiple(generator_model, discriminator_model, combined_model, mo
         # data_extract_1obj.unnormalize_sample(target, sample_set)
 
         # Draw Results.
-        drawFrameRects(sample_set, frame, object_id, generated, isGen=True, folder_dir=data_dir)
-        drawFrameRects(sample_set, frame, object_id, target, isGen=False, folder_dir=data_dir)
+        drawFrameRects(sample_set, frame, object_id, generated, isGen=True, folder_dir=data_dir, dataset=dataset, anchor_frame=False)
+        drawFrameRects(sample_set, frame, object_id, target, isGen=False, folder_dir=data_dir, dataset=dataset, anchor_frame=False)
 
     return
 

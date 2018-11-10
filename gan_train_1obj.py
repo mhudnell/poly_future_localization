@@ -30,28 +30,32 @@ def log_hyperparams(model_name=None, output_dir=None, train_sets=None, val_sets=
         print('    |-beta2: {}'.format(optimizer['beta_2']), file=log_file)
         print('    |-decay: {}'.format(optimizer['decay']), file=log_file)
 
-def plot_loss(model_name, epochs, nb_steps, steps_per_epoch, output_dir, G_losses, D_losses, val_losses, train_ious, val_ious, train_des, val_des, avg_gen_pred, avg_real_pred):
+def plot_loss(model_name, epochs, nb_steps, steps_per_epoch, output_dir, G_losses, D_losses, val_losses,
+              train_ious, val_ious, train_des, val_des, avg_gen_pred, avg_real_pred, show_adv=True):
     # PLOT LOSS
     x_steps = np.arange(1, nb_steps+1) / steps_per_epoch
     fig = plt.figure(figsize=(18, 12), dpi=72)
     ax1 = fig.add_subplot(111)
+    ax1.set_ylim([0.0, 1.0])
 
     # ax1.plot(x, D_losses[:, 0], label='d_loss')
-    ax1.plot(x_steps, D_losses[:, 1], label='d_loss_real')
-    ax1.plot(x_steps, D_losses[:, 2], label='d_loss_fake')
-    
-    ax1.plot(x_steps, G_losses[:, 0], label='g_loss')
-    ax1.plot(x_steps, G_losses[:, 1], label='g_loss_adv')
+    if show_adv:
+        ax1.plot(x_steps, D_losses[:, 1], label='d_loss_real')
+        ax1.plot(x_steps, D_losses[:, 2], label='d_loss_fake')
+        ax1.plot(x_steps, G_losses[:, 0], label='g_loss')
+        ax1.plot(x_steps, G_losses[:, 1], label='g_loss_adv')
+
     ax1.plot(x_steps, G_losses[:, 2], label='smoothL1')
     ax1.plot(x_steps, train_ious, label='iou')
-    ax1.plot(x_steps, train_des, label='DE')
+    # ax1.plot(x_steps, train_des, label='DE')
 
     x_epochs = np.arange(1, epochs+1)
-    ax1.plot(x_epochs, val_losses[:, 0], label='val_g_loss')
-    ax1.plot(x_epochs, val_losses[:, 1], label='val_g_loss_adv')
+    if show_adv:
+        ax1.plot(x_epochs, val_losses[:, 0], label='val_g_loss')
+        ax1.plot(x_epochs, val_losses[:, 1], label='val_g_loss_adv')
     ax1.plot(x_epochs, val_losses[:, 2], label='val_smoothL1')
     ax1.plot(x_epochs, val_ious, label='val_iou')
-    ax1.plot(x_epochs, val_des, label='val_DE')
+    # ax1.plot(x_epochs, val_des, label='val_DE')
 
     ax1.legend(loc=3)
     fig.suptitle(model_name, fontsize=12)
@@ -109,7 +113,7 @@ def train_single(model_specs, train_sets, val_sets, dataset='kitti_tracking'):
      label_cols, label_dim, optimizer, w_adv,
      epochs, batch_size, k_d, k_g,
      show, output_dir] = model_specs
-     
+
     # Get Data
     if dataset == 'kitti_tracking':
         train_data, train_data_info = data_extract_1obj.get_kitti_data(train_sets)
@@ -117,6 +121,8 @@ def train_single(model_specs, train_sets, val_sets, dataset='kitti_tracking'):
     elif dataset == 'kitti_raw_tracklets':
         train_data, train_data_info = data_extract_1obj.get_kitti_raw_tracklets(sets=train_sets)
         val_data, val_data_info = data_extract_1obj.get_kitti_raw_tracklets(sets=val_sets)
+        # print(train_data.shape, train_data.shape[0] / (train_data.shape[0] + val_data.shape[0]))
+        # print(val_data.shape, val_data.shape[0] / (train_data.shape[0] + val_data.shape[0]))
     else:
         raise Exception("`dataset` parameter must be one of: ['kitti_tracking', 'kitti_raw_tracklets']")
 
@@ -146,9 +152,10 @@ def train_single(model_specs, train_sets, val_sets, dataset='kitti_tracking'):
     save_losses(output_dir, val_losses, val_ious, val_des)
 
     # Plot losses
-    plot_loss(model_name, epochs, nb_steps, steps_per_epoch, output_dir, G_losses, D_losses, val_losses, train_ious, val_ious, train_des, val_des, avg_gen_pred, avg_real_pred)
+    plot_loss(model_name, epochs, nb_steps, steps_per_epoch, output_dir, G_losses, D_losses, val_losses,
+              train_ious, val_ious, train_des, val_des, avg_gen_pred, avg_real_pred, show_adv=(w_adv != 0.0))
 
-    return [val_losses, val_ious]
+    return [val_losses, val_ious, val_des]
 
 
 def train_k_fold(k, model_specs, dataset='kitti_tracking', seed=6):
@@ -171,18 +178,23 @@ def train_k_fold(k, model_specs, dataset='kitti_tracking', seed=6):
 
     all_smoothl1 = np.empty((k, epochs))
     all_ious = np.empty((k, epochs))
+    all_DEs = np.empty((k, epochs))
     for i in range(k):
         model_specs[-1] = output_dir + 'fold-' + str(i) + '/'
 
         train_sets = np.setdiff1d(remaining, validation_groups[i])
-        [val_losses, val_ious] = train_single(model_specs, train_sets, validation_groups[i], dataset=dataset)
+        [val_losses, val_ious, val_DEs] = train_single(model_specs, train_sets, validation_groups[i], dataset=dataset)
+
         all_smoothl1[i] = val_losses[:, 2].flatten()
         all_ious[i] = val_ious
+        all_DEs[i] = val_DEs
 
     avgs_smoothl1 = np.mean(all_smoothl1, axis=0)
     min_smoothl1_idx = np.argmin(avgs_smoothl1)
     avgs_iou = np.mean(all_ious, axis=0)
     max_iou_idx = np.argmax(avgs_iou)
+    avgs_DEs = np.mean(all_DEs, axis=0)
+    min_DE_idx = np.argmin(avgs_DEs)
 
     print("K-fold cross validation completed.")
     print("Epoch for optimal smoothL1:", min_smoothl1_idx + 1)
@@ -191,6 +203,9 @@ def train_k_fold(k, model_specs, dataset='kitti_tracking', seed=6):
     print("Epoch for optimal iou:", max_iou_idx + 1)
     print("  -- mean iou:", avgs_iou[max_iou_idx])
     print("  -- individual ious:", all_ious[:, max_iou_idx])
+    print("Epoch for optimal DEs:", min_DE_idx + 1)
+    print("  -- mean DE:", avgs_DEs[min_DE_idx])
+    print("  -- individual ious:", all_DEs[:, min_DE_idx])
 
     resultsFile = open(os.path.join(output_dir, 'results.txt'), 'w')
     resultsFile.write("Epoch for optimal smoothL1: {}\n".format(min_smoothl1_idx + 1))
@@ -199,6 +214,9 @@ def train_k_fold(k, model_specs, dataset='kitti_tracking', seed=6):
     resultsFile.write("Epoch for optimal iou: {}\n".format(max_iou_idx + 1))
     resultsFile.write("  -- mean iou: {}\n".format(avgs_iou[max_iou_idx]))
     resultsFile.write("  -- individual ious: {}\n".format(all_ious[:, max_iou_idx]))
+    resultsFile.write("Epoch for optimal DEs: {}\n".format(min_DE_idx + 1))
+    resultsFile.write("  -- mean DE: {}\n".format(avgs_DEs[min_DE_idx]))
+    resultsFile.write("  -- individual DEs: {}\n".format(all_DEs[:, min_DE_idx]))
 
 def train_k_fold_joint(k, model_specs, dataset='kitti_tracking', seed=6, stopping_epoch=None):
     output_dir = model_specs[-1]
@@ -216,32 +234,38 @@ def train_k_fold_joint(k, model_specs, dataset='kitti_tracking', seed=6, stoppin
     else:
         raise Exception("`dataset` parameter must be one of: ['kitti_tracking', 'kitti_raw_tracklets']")
 
-    # print(test_sets)
     # train_single(model_specs, train_sets, test_sets, dataset=dataset)
-    [test_losses, test_ious] = train_single(model_specs, train_sets, test_sets, dataset=dataset)
+    [test_losses, test_ious, test_DEs] = train_single(model_specs, train_sets, test_sets, dataset=dataset)
 
     min_smoothl1_idx = np.argmin(test_losses[:, 2])
     max_iou_idx = np.argmax(test_ious)
+    min_de_idx = np.argmin(test_DEs)
     final_epoch = len(test_ious)
 
     print("Training / Testing completed. Showing test scores:\n")
     if stopping_epoch:
         print("smoothL1 at stopping_epoch({}): {}".format(stopping_epoch, test_losses[stopping_epoch - 1, 2]))
         print("IoU at stopping_epoch({}): {}".format(stopping_epoch, test_ious[stopping_epoch - 1]))
-    print("Optimal smoothL1 ({}): {}".format(min_smoothl1_idx, test_losses[min_smoothl1_idx, 2]))
-    print("Optimal IoU ({}): {}".format(max_iou_idx, test_ious[max_iou_idx]))
-    print("Final smoothL1({}): {}".format(final_epoch, test_losses[-1, 2]))
-    print("Final IoU({}): {}".format(final_epoch, test_ious[-1]))
+        print("DE at stopping_epoch({}): {}".format(stopping_epoch, test_DEs[stopping_epoch - 1]))
+    print("Best smoothL1 ({}): {}".format(min_smoothl1_idx + 1, test_losses[min_smoothl1_idx, 2]))
+    print("Best IoU ({}): {}".format(max_iou_idx + 1, test_ious[max_iou_idx]))
+    print("Best DE ({}): {}".format(min_de_idx + 1, test_DEs[min_de_idx]))
+    print("Final smoothL1 ({}): {}".format(final_epoch, test_losses[-1, 2]))
+    print("Final IoU ({}): {}".format(final_epoch, test_ious[-1]))
+    print("Final DE ({}): {}".format(final_epoch, test_DEs[-1]))
 
     resultsFile = open(model_specs[-1] + 'results.txt', 'w')
     print("Training / Testing completed. Showing test scores:\n", file=resultsFile)
     if stopping_epoch:
         print("smoothL1 at stopping_epoch({}): {}".format(stopping_epoch, test_losses[stopping_epoch - 1, 2]), file=resultsFile)
         print("IoU at stopping_epoch({}): {}".format(stopping_epoch, test_ious[stopping_epoch - 1]), file=resultsFile)
-    print("Optimal smoothL1 ({}): {}".format(min_smoothl1_idx, test_losses[min_smoothl1_idx, 2]), file=resultsFile)
-    print("Optimal IoU ({}): {}".format(max_iou_idx, test_ious[max_iou_idx]), file=resultsFile)
-    print("Final smoothL1({}): {}".format(final_epoch, test_losses[-1, 2]), file=resultsFile)
-    print("Final IoU({}): {}".format(final_epoch, test_ious[-1]), file=resultsFile)
+        print("DE at stopping_epoch({}): {}".format(stopping_epoch, test_DEs[stopping_epoch - 1]), file=resultsFile)
+    print("Best smoothL1 ({}): {}".format(min_smoothl1_idx + 1, test_losses[min_smoothl1_idx, 2]), file=resultsFile)
+    print("Best IoU ({}): {}".format(max_iou_idx + 1, test_ious[max_iou_idx]), file=resultsFile)
+    print("Best DE ({}): {}".format(min_de_idx + 1, test_DEs[min_de_idx]), file=resultsFile)
+    print("Final smoothL1 ({}): {}".format(final_epoch, test_losses[-1, 2]), file=resultsFile)
+    print("Final IoU ({}): {}".format(final_epoch, test_ious[-1]), file=resultsFile)
+    print("Final DE ({}): {}".format(final_epoch, test_DEs[-1]), file=resultsFile)
 
 if __name__ == '__main__':
     # Define Training Parameters
@@ -251,15 +275,15 @@ if __name__ == '__main__':
             data_cols.append(char + str(fNum))
     label_cols = []
     label_dim = 0
-    epochs = 300
-    batch_size = 4096 #1024  # 128, 64
+    epochs = 700
+    batch_size = 4096 #4096  #7811  #15623 #1024  # 128, 64
     # steps_per_epoch = num_samples // batch_size  # ~1 epoch (35082 / 32 =~ 1096, 128: 274, 35082: 1)  # interval (in steps) at which to log loss summaries and save plots of image samples to disc
     # nb_steps = steps_per_epoch*epochs  # 50000 # Add one for logging of the last interval
     starting_step = 0
 
-    k_d = 2  # 1 number of discriminator network updates per adversarial training step
+    k_d = 0  # 1 number of discriminator network updates per adversarial training step
     k_g = 1  # 1 number of generator network updates per adversarial training step
-    w_adv = 0.1
+    w_adv = 0.0
 
     optimizer = {
                 'name': 'adam',
@@ -268,7 +292,7 @@ if __name__ == '__main__':
                 'beta_2': .999,     # default: .999
                 'decay': 0       # default: 0
                 }
-    model_name = 'maxGAN_raw_tracklet_6-fold_1s-pred_G6-64_D3-32_w-adv{}_{}-lr{}-b1{}-b2{}_bs{}_kd{}_kg{}_epochs{}'.format(
+    model_name = 'maxGAN_CAR-ONLY_6-fold_1s-pred_G3-64_D3-32_w-adv{}_{}-lr{}-b1{}-b2{}_bs{}_kd{}_kg{}_epochs{}'.format(
         w_adv, optimizer['name'], optimizer['lr'], optimizer['beta_1'], optimizer['beta_2'], batch_size, k_d, k_g, epochs
         )
     # model_name = 'maxGAN_SHOW-D-LEARN_1s-pred_G6-64_D3-32_w-adv{}_{}-lr{}-b1{}-b2{}_bs{}_kd{}_kg{}_epochs{}'.format(
@@ -293,8 +317,8 @@ if __name__ == '__main__':
 
     # # Perform k-fold cross validation
     # train_k_fold(6, model_specs)
-    # train_k_fold(6, model_specs, dataset='kitti_raw_tracklets')
+    # train_k_fold(6, model_specs, dataset='kitti_raw_tracklets', seed=10)
 
     # Train final k-fold model over all training / validation data
     # train_k_fold_joint(6, model_specs)
-    train_k_fold_joint(6, model_specs, dataset='kitti_raw_tracklets', stopping_epoch=None)
+    train_k_fold_joint(6, model_specs, dataset='kitti_raw_tracklets', seed=10, stopping_epoch=None)

@@ -74,107 +74,6 @@ kitti_raw_map = [
     '2011_09_26_drive_0093_sync'
 ]
 
-# def getLineCounts_1obj():
-#     """Check that all 'past' data files have 10 lines, and 'future' data files have 11 lines."""
-#     total_past_count = 0
-#     badpast_count = 0
-#     for subdir, _, files in os.walk('F:\\Car data\\label_02_extracted\\past_1obj_LTWH'):
-#         for file in files:
-#             filename = os.path.join(subdir, file)
-
-#             with open(filename) as f:
-#                 for i, _ in enumerate(f):
-#                     pass
-#             # print(str(i + 1), end='')
-#             if i + 1 != 10:
-#                 print(str(i + 1) + " : " + filename)
-#                 badpast_count += 1
-
-#             total_past_count += 1
-#     if badpast_count == 0:
-#         print("All {} past files are of correct length".format(total_past_count))
-
-#     total_future_count = 0
-#     badfuture_count = 0
-#     for subdir, _, files in os.walk('F:\\Car data\\label_02_extracted\\future_1obj_LTWH'):
-#         for file in files:
-#             filename = os.path.join(subdir, file)
-
-#             with open(filename) as f:
-#                 for i, _ in enumerate(f):
-#                     pass
-#             # print(str(i + 1), end='')
-#             if i + 1 != 11:
-#                 print(str(i + 1) + " : " + filename)
-#                 badfuture_count += 1
-
-#             total_future_count += 1
-#     if badfuture_count == 0:
-#         print("All {} future files are of correct length".format(total_future_count))
-
-
-# def generateDataFiles_1obj(fpath):
-#     """
-#     Read each kitti data file; identify objects with 15-frame sequences and create 'past' samples using the first 10 frames,
-#     and create 'future' samples using the first 10 frames and the 15th (target) frame. Write each 'past' and 'future' sample to its own file.
-#     """
-#     f = open(fpath,'r')
-#     fname = os.path.splitext(fpath)[0]
-
-#     path_past = 'F:\\Car data\\label_02_extracted\\past_1obj_LTWH\\' + fname
-#     path_future = 'F:\\Car data\\label_02_extracted\\future_1obj_LTWH\\' + fname
-
-#     if not os.path.exists(path_past):
-#         os.makedirs(path_past)
-#     if not os.path.exists(path_future):
-#         os.makedirs(path_future)
-
-#     data_num = 0
-#     obj_bb_dict = {}
-#     obj_lastFrame_dict = {}
-
-#     while True:
-#         line = f.readline()
-#         if not line:
-#             f.close()
-#             return data_num
-
-#         words = line.split()
-#         frame_num = words[0]
-#         obj_id = words[1]
-
-#         if words[2] != "DontCare":
-#             L = float(words[6])
-#             T = float(words[7])
-#             R = float(words[8])
-#             B = float(words[9])
-#             bb = [str(L), str(T), str(R - L), str(B - T)]
-
-#             if obj_id in obj_bb_dict and obj_lastFrame_dict[obj_id] == int(frame_num) - 1:
-#                 obj_queue = obj_bb_dict[obj_id]
-#                 #if len(obj_queue) > 1: print(len(obj_queue))
-#                 if len(obj_queue) >= 15:
-#                     obj_queue.popleft()
-
-#                 obj_queue.append(bb)
-#                 obj_lastFrame_dict[obj_id] = int(frame_num)
-
-#                 if len(obj_queue) == 15:
-#                     fpast = open(path_past + '\\past' + str(data_num) +'_objId'+obj_id+'_frameNum'+frame_num+'.txt', 'w')
-#                     ffuture = open(path_future + '\\future' + str(data_num) +'_objId'+obj_id+'_frameNum'+frame_num+'.txt', 'w')
-
-#                     for i in range(10):
-#                         fpast.write(" ".join(obj_queue[i]) + "\n")
-#                         ffuture.write(" ".join(obj_queue[i]) + "\n")  # include past data along with future position
-#                     ffuture.write(" ".join(obj_queue[14]) + "\n")
-
-#                     fpast.close()
-#                     ffuture.close()
-#                     data_num += 1
-#             else:
-#                 obj_bb_dict[obj_id] = deque([bb]) # create a new queue for this obj_id
-#                 obj_lastFrame_dict[obj_id] = int(frame_num)
-
 def get_kitti_training(normalize=True, transform=True):
     # training_sets = ["0000", "0001", "0002", "0003", "0004", "0005", "0006", "0007",
     #                  "0008", "0009", "0010", "0011", "0012", "0013", "0014", "0015", "0016"]
@@ -256,18 +155,26 @@ def get_kitti_data(sets, normalize=True, transform=True):
 
         return np.asarray(samples), samples_info
 
-def get_kitti_raw_tracklets(sets=None, normalize=True, transform=True, use_occluded=True):
+def get_kitti_raw_tracklets(timepoints, sets=None, normalize=True, use_occluded=True):
     """
-    Parse kitti label files and construct a set of samples. Each sample has 11 'bounding boxes', where each
-    bounding box stores 4 floats (left, top, width, height). The 11th bounding box is the 'target'
+    Parse kitti tracklet files and construct a set of samples [input X and targets Y].
 
     Arguments:
+        timepoints: array of timepoints, should be rounded to tenths of a second.
         sets: [set of integers; range: 0-37] if specified, only retrieve these sets
     Returns:
-        samples (ndarray (ndim: 3)): (m, 11, 4)
+        x: [N x 10 x 4] 10 past bounding boxes. Normalized [cx, cy, w, h] values.
+        y: [N x 4 x (# of future frames)] transformation parameters. Each column corresponds to a transformation for a timestep.
+        samples_info: [N x 5] [<sequence dir>, <anchor frame filename>, <final frame filename>, <object id>, <object class>]
     """
-    samples = []
-    samples_info = []  # (sample set, frame number)
+    x = []
+    y = []
+    samples_info = []  # (seq_dir, anchor frame, final frame, object id, object class)
+
+    future_frames = (timepoints*10).astype(int)
+    num_required_frames = future_frames[-1]
+    print('future_frames:', future_frames)
+    print('num_required_frames:', num_required_frames)
 
     root = "F:\\Car data\\kitti\\data_raw_with_tracklets\\2011_09_26"
     for i, seq in enumerate(os.listdir(root)):
@@ -290,9 +197,9 @@ def get_kitti_raw_tracklets(sets=None, normalize=True, transform=True, use_occlu
 
                 if (not use_occluded) and (words[4] not in ['0', '1']):
                     continue
-                
+
                 # Add classes to include all vehicles, or pedestrians.
-                if object_class not in ['Car']:     # , 'Van', 'Truck', 'Cyclist'       # 'Pedestrian'
+                if object_class not in ['Car', 'Van', 'Truck', 'Cyclist']:     #        # 'Pedestrian'
                     continue
 
                 L = float(words[6])
@@ -305,36 +212,38 @@ def get_kitti_raw_tracklets(sets=None, normalize=True, transform=True, use_occlu
                 cy = (T + B)/2
                 bb = [cx/1242, cy/375, w/1242, h/375] if normalize else [cx, cy, w, h]
 
-                if object_id in object_last_seen and object_last_seen[object_id] == frame_number - 1:  # Object has been seen previously AND the object was seen in the previous frame
+                # Object was seen in the previous frame?
+                if object_id in object_last_seen and object_last_seen[object_id] == frame_number - 1:  
                     object_queue = object_queues[object_id]
                     object_queue.append(bb)
 
-                    # if len(object_queue) >= 15:  # have 1.5sec of continuous info=> Can create a sample
-                    #     if len(object_queue) == 16:
-                    if len(object_queue) >= 20:  # have 2.0sec of continuous info=> Can create a sample
-                        if len(object_queue) == 21:
+                    # Check for required period of continuous info => Can create a sample
+                    if len(object_queue) >= 10 + num_required_frames:
+                        if len(object_queue) == 10 + num_required_frames + 1:
                             object_queue.popleft()
-                        sample = []
+
+                        x_sample = np.empty((10, 4))
                         for i in range(10):
-                            sample.append(object_queue[i])
-                            
-                        if transform:
-                            # target = get_transformation(object_queue[9], object_queue[14])
-                            target = get_transformation(object_queue[9], object_queue[19])
-                        else:
-                            # target = object_queue[14]
-                            raise Exception('should not happen.')
-                            
-                        sample.append(target)  # Append the target box (or transformation)
-                        samples.append(sample)
-                        samples_info.append((seq_dir, str(frame_number).zfill(10), object_id, object_class))
+                            x_sample[i] = object_queue[i]
+
+                        y_sample = np.empty((4, len(future_frames)))
+                        for i, j in enumerate(future_frames):
+                            t = get_transformation(object_queue[9], object_queue[9+j])
+                            y_sample[:, i] = t
+
+                        x.append(x_sample)
+                        y.append(y_sample)
+
+                        anchor_frame = str(frame_number - num_required_frames).zfill(10)
+                        final_frame = str(frame_number).zfill(10)
+                        samples_info.append((seq_dir, anchor_frame, final_frame, object_id, object_class))
 
                 else:
                     object_queues[object_id] = deque([bb])  # Reset / create a new queue of bounding boxes for this object
 
                 object_last_seen[object_id] = frame_number  # Update last seen frame for this object
 
-    return np.asarray(samples), samples_info
+    return np.asarray(x), np.asarray(y), samples_info
 
 def get_epoch(samples, batch_size, seed=0):
     """
@@ -358,7 +267,7 @@ def get_epoch(samples, batch_size, seed=0):
 
 
 
-def get_batch(samples, batch_size, seed=0):
+def get_batch(samples, batch_size, seed=None):
     """
     Retreive (batch_size) number of samples. Each sample is vectorized.
 
@@ -374,6 +283,22 @@ def get_batch(samples, batch_size, seed=0):
     batch = samples[indices]
 
     return np.reshape(batch, (batch_size, -1))
+
+def get_batch_ids(num_samples, batch_size, seed=None):
+    """
+    Retreive (batch_size) number of indices from [0-num_samples).
+
+    Returns:
+        ndarray (ndim: 2):
+    """
+
+    if seed:  # For Testing
+        print("Getting seeded batch")
+        np.random.seed(seed)
+
+    indices = np.random.choice(num_samples, size=batch_size, replace=False)
+
+    return indices
 
 def scale_bb(bb, sample_set, desired_res):
     """
@@ -501,12 +426,12 @@ if __name__ == '__main__':
     # print("epoch shape:", epoch.shape)
 
     # samples, samples_info = get_kitti_raw_data()
-    samples, samples_info = get_kitti_raw_tracklets(use_occluded=True)
+    timepoints = np.linspace(0.1, 1.0, 10)
+    x, y, samples_info = get_kitti_raw_tracklets(timepoints, use_occluded=True)
 
-    print("shape: ", samples.shape)
-    # print(samples[0])
-    # print(samples_info[0])
-    # for s in samples:
-    #     print(s)
+    print('x shape:', x.shape)
+    print('y shape:', y.shape)
+    print('info length:', len(samples_info))
 
-    # print(samples_info)
+    print(x[0])
+    print(y[0])

@@ -181,6 +181,33 @@ def calc_metrics(anchor, target_transform, generated_transform, sample_set=None)
     return iou, de
 
 
+
+def calc_metrics_polynomial(anchor, target_transforms, coeffs, sample_set=None):
+    """ Calculates displacement error and IoU metrics for 0.5 and 1.0 sec predictions"""
+    # coeffs = np.reshape(coeffs, (4, 3))
+
+    ious = np.empty(2)
+    des = np.empty(2)
+    for i, timestep in enumerate(np.linspace(0.5, 1, 2)):
+        # generated_transform = np.dot(coeffs, np.array([timestep, timestep**2, timestep**3, timestep**4, timestep**5]))
+        generated_transform = np.dot(coeffs, np.array([timestep, timestep**2, timestep**3, timestep**4]))
+        # generated_transform = np.dot(coeffs, np.array([timestep, timestep**2, timestep**3]))
+        # generated_transform = np.dot(coeffs, np.array([timestep, timestep**2]))
+        # print('generated_transform:', generated_transform)
+        t_bb = data_extract_1obj.transform(anchor, target_transforms[:, (i*5)+4])
+        g_bb = data_extract_1obj.transform(anchor, generated_transform)
+        t_bb = data_extract_1obj.unnormalize_bb(t_bb, sample_set=sample_set)
+        g_bb = data_extract_1obj.unnormalize_bb(g_bb, sample_set=sample_set)
+
+        target = Rect.make_cXcYWH(t_bb[0], t_bb[1], t_bb[2], t_bb[3])
+        generated = Rect.make_cXcYWH(g_bb[0], g_bb[1], g_bb[2], g_bb[3])
+
+        ious[i] = Rect.get_IoU(target, generated)
+        des[i] = Rect.get_DE(target, generated)
+
+    return ious, des
+
+
 if __name__ == '__main__':
 
     # samples, samples_info = data_extract_1obj.get_kitti_data(sets=None)

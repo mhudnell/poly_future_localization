@@ -5,6 +5,7 @@ import pickle
 import os
 import logging
 import data_extract_1obj
+import poly_model
 
 def log_hyperparams(model_name=None, output_dir=None, train_sets=None, val_sets=None, epochs=None, batch_size=None, k_d=None, k_g=None, optimizer=None, show=None, dataset=None):
     if not os.path.exists(output_dir):
@@ -30,31 +31,35 @@ def log_hyperparams(model_name=None, output_dir=None, train_sets=None, val_sets=
         print('    |-beta2: {}'.format(optimizer['beta_2']), file=log_file)
         print('    |-decay: {}'.format(optimizer['decay']), file=log_file)
 
-def plot_loss(model_name, epochs, nb_steps, steps_per_epoch, output_dir, G_losses, D_losses, val_losses,
-              train_ious, val_ious, train_des, val_des, avg_gen_pred, avg_real_pred, show_adv=True):
+def plot_loss(model_name, epochs, nb_steps, steps_per_epoch, output_dir, M_losses, val_losses,
+              train_ious, val_ious, train_des, val_des, show_adv=True): #, avg_gen_pred, avg_real_pred, 
     # PLOT LOSS
     x_steps = np.arange(1, nb_steps+1) / steps_per_epoch
     fig = plt.figure(figsize=(18, 12), dpi=72)
     ax1 = fig.add_subplot(111)
     ax1.set_ylim([0.0, 1.0])
 
-    # ax1.plot(x, D_losses[:, 0], label='d_loss')
-    if show_adv:
-        ax1.plot(x_steps, D_losses[:, 1], label='d_loss_real')
-        ax1.plot(x_steps, D_losses[:, 2], label='d_loss_fake')
-        ax1.plot(x_steps, G_losses[:, 0], label='g_loss')
-        ax1.plot(x_steps, G_losses[:, 1], label='g_loss_adv')
+    # # ax1.plot(x, D_losses[:, 0], label='d_loss')
+    # if show_adv:
+    #     ax1.plot(x_steps, D_losses[:, 1], label='d_loss_real')
+    #     ax1.plot(x_steps, D_losses[:, 2], label='d_loss_fake')
+    #     ax1.plot(x_steps, G_losses[:, 0], label='g_loss')
+    #     ax1.plot(x_steps, G_losses[:, 1], label='g_loss_adv')
 
-    ax1.plot(x_steps, G_losses[:, 2], label='smoothL1')
-    ax1.plot(x_steps, train_ious, label='iou')
+    # ax1.plot(x_steps, G_losses[:, 2], label='smoothL1')
+    ax1.plot(x_steps, M_losses, label='smoothL1')
+    ax1.plot(x_steps, train_ious[:, 0], label='iou +0.5s')
+    ax1.plot(x_steps, train_ious[:, 1], label='iou +1.0s')
     # ax1.plot(x_steps, train_des, label='DE')
 
     x_epochs = np.arange(1, epochs+1)
-    if show_adv:
-        ax1.plot(x_epochs, val_losses[:, 0], label='val_g_loss')
-        ax1.plot(x_epochs, val_losses[:, 1], label='val_g_loss_adv')
-    ax1.plot(x_epochs, val_losses[:, 2], label='val_smoothL1')
-    ax1.plot(x_epochs, val_ious, label='val_iou')
+    # if show_adv:
+    #     ax1.plot(x_epochs, val_losses[:, 0], label='val_g_loss')
+    #     ax1.plot(x_epochs, val_losses[:, 1], label='val_g_loss_adv')
+    # ax1.plot(x_epochs, val_losses[:, 2], label='val_smoothL1')
+    ax1.plot(x_epochs, val_losses, label='val_smoothL1')
+    ax1.plot(x_epochs, val_ious[:, 0], label='val_iou +0.5s')
+    ax1.plot(x_epochs, val_ious[:, 1], label='val_iou +1.0s')
     # ax1.plot(x_epochs, val_des, label='val_DE')
 
     ax1.legend(loc=3)
@@ -67,18 +72,18 @@ def plot_loss(model_name, epochs, nb_steps, steps_per_epoch, output_dir, G_losse
     # plt.show()
 
     # PLOT DISCRIM PREDICTIONS
-    fig = plt.figure(figsize=(18, 12), dpi=72)
-    ax1 = fig.add_subplot(111)
+    # fig = plt.figure(figsize=(18, 12), dpi=72)
+    # ax1 = fig.add_subplot(111)
 
-    ax1.plot(x_epochs, avg_gen_pred, label='avg_gen_pred')
-    ax1.plot(x_epochs, avg_real_pred, label='avg_real_pred')
+    # ax1.plot(x_epochs, avg_gen_pred, label='avg_gen_pred')
+    # ax1.plot(x_epochs, avg_real_pred, label='avg_real_pred')
 
-    ax1.legend(loc=1)
-    fig.suptitle(model_name, fontsize=12)
-    plt.xlabel('epoch', fontsize=18)
-    plt.ylabel('avg prediction', fontsize=16)
+    # ax1.legend(loc=1)
+    # fig.suptitle(model_name, fontsize=12)
+    # plt.xlabel('epoch', fontsize=18)
+    # plt.ylabel('avg prediction', fontsize=16)
 
-    plt.savefig(os.path.join(output_dir, 'discrim_prediction_plot.png'))
+    # plt.savefig(os.path.join(output_dir, 'discrim_prediction_plot.png'))
 
 def save_losses(output_dir, val_losses, val_ious, val_des):
     # Make loss dir
@@ -114,46 +119,47 @@ def train_single(model_specs, train_sets, val_sets, dataset='kitti_tracking'):
      epochs, batch_size, k_d, k_g,
      show, output_dir] = model_specs
 
+    poly_order = 4
+    timepoints = np.linspace(0.1, 1.0, 10)
+
     # Get Data
     if dataset == 'kitti_tracking':
-        train_data, train_data_info = data_extract_1obj.get_kitti_data(train_sets)
-        val_data, val_data_info = data_extract_1obj.get_kitti_data(val_sets)
+        ...
+        # train_data, train_data_info = data_extract_1obj.get_kitti_data(train_sets)
+        # val_data, val_data_info = data_extract_1obj.get_kitti_data(val_sets)
     elif dataset == 'kitti_raw_tracklets':
-        train_data, train_data_info = data_extract_1obj.get_kitti_raw_tracklets(sets=train_sets)
-        val_data, val_data_info = data_extract_1obj.get_kitti_raw_tracklets(sets=val_sets)
+        x_train, y_train, train_info = data_extract_1obj.get_kitti_raw_tracklets(timepoints, sets=train_sets)
+        x_val, y_val, val_info = data_extract_1obj.get_kitti_raw_tracklets(timepoints, sets=val_sets)
         # print(train_data.shape, train_data.shape[0] / (train_data.shape[0] + val_data.shape[0]))
         # print(val_data.shape, val_data.shape[0] / (train_data.shape[0] + val_data.shape[0]))
     else:
         raise Exception("`dataset` parameter must be one of: ['kitti_tracking', 'kitti_raw_tracklets']")
 
     # Log hyperparameters
-    steps_per_epoch = len(train_data) // batch_size
+    steps_per_epoch = len(x_train) // batch_size
     nb_steps = steps_per_epoch*epochs
     log_hyperparams(model_name=model_name, output_dir=output_dir, train_sets=train_sets, val_sets=val_sets,
                     epochs=epochs, batch_size=batch_size, k_d=k_d, k_g=k_g, optimizer=optimizer, show=show,
                     dataset=dataset)
 
     # Get Model
-    poly_order = 3
-    timepoints = np.linspace(0.1, 1.0, 10)
-    generator_model, discriminator_model, combined_model = gan_1obj.get_model(
-        data_cols, poly_order, timepoints, optimizer=optimizer, w_adv=w_adv)
-    print("metrics_names:", combined_model.metrics_names)
+    
+    M = poly_model.get_model_poly(output_dir, poly_order, timepoints, optimizer=optimizer)
 
     # Train Model
     model_components = [model_name, starting_step, data_cols,
                         label_cols, label_dim,  # optimizer,
-                        generator_model, discriminator_model, combined_model,
+                        M,
                         epochs, batch_size, k_d, k_g,
                         show, output_dir]
-    [G_losses, D_losses, val_losses, train_ious, val_ious, train_des, val_des, avg_gen_pred, avg_real_pred] = gan_1obj.training_steps_GAN(train_data, train_data_info, val_data, val_data_info, model_components)
-
+    # [G_losses, D_losses, val_losses, train_ious, val_ious, train_des, val_des, avg_gen_pred, avg_real_pred] = gan_1obj.training_steps_GAN(x_train, x_val, y_train, y_val, train_info, val_info, model_components)
+    [M_losses, val_losses, train_ious, val_ious, train_des, val_des] = poly_model.train_poly(x_train, x_val, y_train, y_val, train_info, val_info, model_components)
     # Save losses
     save_losses(output_dir, val_losses, val_ious, val_des)
 
     # Plot losses
-    plot_loss(model_name, epochs, nb_steps, steps_per_epoch, output_dir, G_losses, D_losses, val_losses,
-              train_ious, val_ious, train_des, val_des, avg_gen_pred, avg_real_pred, show_adv=(w_adv != 0.0))
+    plot_loss(model_name, epochs, nb_steps, steps_per_epoch, output_dir, M_losses, val_losses,
+              train_ious, val_ious, train_des, val_des, show_adv=(w_adv != 0.0))
 
     return [val_losses, val_ious, val_des]
 
@@ -237,9 +243,10 @@ def train_k_fold_joint(k, model_specs, dataset='kitti_tracking', seed=6, stoppin
     # train_single(model_specs, train_sets, test_sets, dataset=dataset)
     [test_losses, test_ious, test_DEs] = train_single(model_specs, train_sets, test_sets, dataset=dataset)
 
-    min_smoothl1_idx = np.argmin(test_losses[:, 2])
-    max_iou_idx = np.argmax(test_ious)
-    min_de_idx = np.argmin(test_DEs)
+    # min_smoothl1_idx = np.argmin(test_losses[:, 2])
+    min_smoothl1_idx = np.argmin(test_losses)
+    max_iou_idx = np.argmax(test_ious, axis=0)
+    min_de_idx = np.argmin(test_DEs, axis=0)
     final_epoch = len(test_ious)
 
     print("Training / Testing completed. Showing test scores:\n")
@@ -247,10 +254,13 @@ def train_k_fold_joint(k, model_specs, dataset='kitti_tracking', seed=6, stoppin
         print("smoothL1 at stopping_epoch({}): {}".format(stopping_epoch, test_losses[stopping_epoch - 1, 2]))
         print("IoU at stopping_epoch({}): {}".format(stopping_epoch, test_ious[stopping_epoch - 1]))
         print("DE at stopping_epoch({}): {}".format(stopping_epoch, test_DEs[stopping_epoch - 1]))
-    print("Best smoothL1 ({}): {}".format(min_smoothl1_idx + 1, test_losses[min_smoothl1_idx, 2]))
+    # print("Best smoothL1 ({}): {}".format(min_smoothl1_idx + 1, test_losses[min_smoothl1_idx, 2]))
+    print("Best smoothL1 ({}): {}".format(min_smoothl1_idx + 1, test_losses[min_smoothl1_idx]))
+
     print("Best IoU ({}): {}".format(max_iou_idx + 1, test_ious[max_iou_idx]))
     print("Best DE ({}): {}".format(min_de_idx + 1, test_DEs[min_de_idx]))
-    print("Final smoothL1 ({}): {}".format(final_epoch, test_losses[-1, 2]))
+    # print("Final smoothL1 ({}): {}".format(final_epoch, test_losses[-1, 2]))
+    print("Final smoothL1 ({}): {}".format(final_epoch, test_losses[-1]))
     print("Final IoU ({}): {}".format(final_epoch, test_ious[-1]))
     print("Final DE ({}): {}".format(final_epoch, test_DEs[-1]))
 
@@ -260,10 +270,12 @@ def train_k_fold_joint(k, model_specs, dataset='kitti_tracking', seed=6, stoppin
         print("smoothL1 at stopping_epoch({}): {}".format(stopping_epoch, test_losses[stopping_epoch - 1, 2]), file=resultsFile)
         print("IoU at stopping_epoch({}): {}".format(stopping_epoch, test_ious[stopping_epoch - 1]), file=resultsFile)
         print("DE at stopping_epoch({}): {}".format(stopping_epoch, test_DEs[stopping_epoch - 1]), file=resultsFile)
-    print("Best smoothL1 ({}): {}".format(min_smoothl1_idx + 1, test_losses[min_smoothl1_idx, 2]), file=resultsFile)
+    # print("Best smoothL1 ({}): {}".format(min_smoothl1_idx + 1, test_losses[min_smoothl1_idx, 2]), file=resultsFile)
+    print("Best smoothL1 ({}): {}".format(min_smoothl1_idx + 1, test_losses[min_smoothl1_idx]), file=resultsFile)
     print("Best IoU ({}): {}".format(max_iou_idx + 1, test_ious[max_iou_idx]), file=resultsFile)
     print("Best DE ({}): {}".format(min_de_idx + 1, test_DEs[min_de_idx]), file=resultsFile)
-    print("Final smoothL1 ({}): {}".format(final_epoch, test_losses[-1, 2]), file=resultsFile)
+    # print("Final smoothL1 ({}): {}".format(final_epoch, test_losses[-1, 2]), file=resultsFile)
+    print("Final smoothL1 ({}): {}".format(final_epoch, test_losses[-1]), file=resultsFile)
     print("Final IoU ({}): {}".format(final_epoch, test_ious[-1]), file=resultsFile)
     print("Final DE ({}): {}".format(final_epoch, test_DEs[-1]), file=resultsFile)
 
@@ -292,14 +304,14 @@ if __name__ == '__main__':
                 'beta_2': .999,     # default: .999
                 'decay': 0       # default: 0
                 }
-    model_name = 'maxGAN_CAR-ONLY_6-fold_1s-pred_G3-64_D3-32_w-adv{}_{}-lr{}-b1{}-b2{}_bs{}_kd{}_kg{}_epochs{}'.format(
+    model_name = 'quartic_logtsteps_VEHICLES_6-fold_1s-pred_G3-64_D3-32_w-adv{}_{}-lr{}-b1{}-b2{}_bs{}_kd{}_kg{}_epochs{}'.format(
         w_adv, optimizer['name'], optimizer['lr'], optimizer['beta_1'], optimizer['beta_2'], batch_size, k_d, k_g, epochs
         )
     # model_name = 'maxGAN_SHOW-D-LEARN_1s-pred_G6-64_D3-32_w-adv{}_{}-lr{}-b1{}-b2{}_bs{}_kd{}_kg{}_epochs{}'.format(
     #     w_adv, optimizer['name'], optimizer['lr'], optimizer['beta_1'], optimizer['beta_2'], batch_size, k_d, k_g, epochs
     #     )
     # TODO (True): change output directory
-    output_dir = 'C:\\Users\\Max\\Research\\maxGAN\\models\\'+model_name+'\\'
+    output_dir = os.path.join('C:\\Users\\Max\\Research\\maxGAN\\models\\', model_name)
     show = True
 
     # Train Model

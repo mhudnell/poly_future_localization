@@ -10,7 +10,7 @@ import tensorflow as tf
 import os
 import re
 
-from vis_tool import drawFrameRects, get_IoU, Rect, calc_metrics, calc_metrics_polynomial
+from vis_tool import drawFrameRects, get_IoU, Rect, calc_metrics, calc_metrics_polynomial, calc_metrics_mult
 import data_extract_1obj
 
 
@@ -22,10 +22,12 @@ def smoothL1(y_true, y_pred):
 # returns the berHu loss without assuming a fixed sigma in the distribution
 # tau: threshold for the distribution switch, which is multiplied by sigma
 def berHu_generator(tau):
-    # y_true: Bx4xT
+    # y_true: Bx4xTx1 (keras requires this to be 4 dimensions)
     # y_pred: Bx4xTx2 (mean, stdev)
     def berHu(y_true, y_pred):
         mu, sigma = y_pred[...,0], y_pred[...,1]
+        mu = tf.reshape(mu, [-1,4,10,1])
+        sigma = tf.reshape(sigma, [-1,4,10,1])
 
         abs_diff = tf.abs(y_true - mu)
         squared_diff = tf.square(y_true - mu)
@@ -54,8 +56,8 @@ def define_poly_network(poly_order, timepoints):
     # coeffs: for each output dimension, (a, b, c, ..., sigma), where sigma is
     #   the confidence value
     coeffs = layers.Dense(
-        4 * poly_order + 1, activation="linear", name="coeffs")(x)
-    coeffs = layers.Reshape(4, poly_order + 1)(coeffs)
+        4 * (poly_order + 1), activation="linear", name="coeffs")(x)
+    coeffs = layers.Reshape((4, poly_order + 1))(coeffs)
 
     # timepoints: PxT for P polynomial coefficients, i.e.
     # [  t_0   t_1  ... ]
@@ -68,12 +70,12 @@ def define_poly_network(poly_order, timepoints):
     # the mean is computed as c_1 * t^P + c_2 * t^{P-1} + ... + c_P * t
     # the std. dev. is computed as (exp(sigma) + 1e-6) * t
     kSigmaMin = 1e-6  # avoid poor conditioning
-    mu = layers.Lambda(lambda x: K.dot(x, timepoints))(coeffs[...,:-1])
+    mu = layers.Lambda(lambda x: K.dot(x[...,:-1], timepoints))(coeffs)
     sigma = layers.Lambda(
-            lambda x: (K.exp(x) + kSigmaMin)[:,:,tf.newaxis] * timepoints[0,:])(
-        coeffs[...,-1])
-
-    output = layers.concatenate([mu[...,tf.newaxis], sigma[...,tf.newaxis]])
+            lambda x: (K.exp(x[...,-1,tf.newaxis]) + kSigmaMin) * timepoints[0,:])(
+        coeffs)
+    
+    output = layers.Lambda(lambda x: K.stack(x, axis=-1), name="transforms")([mu, sigma])
 
     M = models.Model(inputs=[poly_input], outputs=[output, coeffs], name='poly_regressor')
 
@@ -113,7 +115,7 @@ def train_poly(x_train, x_val, y_train, y_val, train_info, val_info, model_compo
     steps_per_epoch = len(x_train) // batch_size
     nb_steps = steps_per_epoch*epochs
     val_input = x_val.reshape((len(x_val), 40))
-    val_target = y_val
+    val_target = y_val.reshape((len(y_val), 4, 10, 1))
 
     print('len(x_train):', len(x_train), 'batch_size:', batch_size, 'steps_per_epoch:', steps_per_epoch)
     print('x_train: ', x_train.shape)
@@ -137,20 +139,20 @@ def train_poly(x_train, x_val, y_train, y_val, train_info, val_info, model_compo
         K.set_learning_phase(1)
         batch_ids = data_extract_1obj.get_batch_ids(len(x_train), batch_size)
         gen_input = x_train[batch_ids].reshape((batch_size, 40))
-        gen_target = y_train[batch_ids]
+        gen_target = y_train[batch_ids].reshape((batch_size, 4, 10, 1))
 
         ### TRAIN (y = 1) bc want pos feedback for tricking discrim (want discrim to output 1)
         M_loss = M.train_on_batch(gen_input, {'transforms': gen_target})
         # print('M_loss:', len(M_loss))
         # print(M_loss[2][0])
         # print(M_loss[3][0])
-        coeffs = M_loss[3]
+        gen_transforms = M_loss[2]
 
         # Calculate IoU and DE metrics.
         batch_ious = np.empty((batch_size, 2))
         batch_des = np.empty((batch_size, 2))
         for j in range(batch_size):
-            batch_ious[j], batch_des[j] = calc_metrics_polynomial(gen_input[j][-4:], gen_target[j], coeffs[j])
+            batch_ious[j], batch_des[j] = calc_metrics_mult(gen_input[j][-4:], gen_target[j], gen_transforms[j])
 
         avg_iou = np.mean(batch_ious, axis=0)
         avg_de = np.mean(batch_des, axis=0)
@@ -167,12 +169,12 @@ def train_poly(x_train, x_val, y_train, y_val, train_info, val_info, model_compo
             # Evaluate on validation set
             num_val_samples = len(val_input)
             val_loss = M.test_on_batch(val_input, {'transforms': val_target})
-            coeffs = val_loss[3]
+            gen_transforms = val_loss[2]
 
             val_batch_ious = np.empty((num_val_samples, 2))
             val_batch_des = np.empty((num_val_samples, 2))
             for j in range(num_val_samples):
-                val_batch_ious[j], val_batch_des[j] = calc_metrics_polynomial(val_input[j][-4:], val_target[j], coeffs[j])
+                val_batch_ious[j], val_batch_des[j] = calc_metrics_mult(val_input[j][-4:], val_target[j], gen_transforms[j])
 
             # Print first sample.
             # t_bb = data_extract_1obj.transform(val_input[0][-4:], val_target[0][:, 9])

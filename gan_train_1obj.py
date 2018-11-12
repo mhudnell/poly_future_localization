@@ -121,6 +121,7 @@ def train_single(model_specs, train_sets, val_sets, dataset='kitti_tracking'):
 
     poly_order = 4
     timepoints = np.linspace(0.1, 1.0, 10)
+    tau = 1. # berHu threshold is tau * sigma
 
     # Get Data
     if dataset == 'kitti_tracking':
@@ -144,7 +145,7 @@ def train_single(model_specs, train_sets, val_sets, dataset='kitti_tracking'):
 
     # Get Model
     
-    M = poly_model.get_model_poly(output_dir, poly_order, timepoints, optimizer=optimizer)
+    M = poly_model.get_model_poly(output_dir, poly_order, timepoints, tau, optimizer=optimizer)
 
     # Train Model
     model_components = [model_name, starting_step, data_cols,

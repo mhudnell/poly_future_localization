@@ -19,31 +19,68 @@ def smoothL1(y_true, y_pred):
     condition = tf.less(tmp, 1.)
     return tf.reduce_sum(tf.where(condition, tf.scalar_mul(0.5, tf.square(tmp)), tmp - 0.5), axis=-1)
 
+# returns the berHu loss without assuming a fixed sigma in the distribution
+# tau: threshold for the distribution switch, which is multiplied by sigma
+def berHu_generator(tau):
+    # y_true: Bx4xT
+    # y_pred: Bx4xTx2 (mean, stdev)
+    def berHu(y_true, y_pred):
+        mu, sigma = y_pred[...,0], y_pred[...,1]
+
+        abs_diff = tf.abs(y_true - mu)
+        squared_diff = tf.square(y_true - mu)
+        loss = tf.reduce_sum(tf.where(
+            tf.less(abs_diff, tau * sigma),
+            tau * (0.5 * tau - abs_diff / sigma),
+            0.5 * squared_diff / tf.square(sigma)))
+
+        confidence_penalty = tf.reduce_sum(tf.log(sigma))
+
+        return loss + confidence_penalty
+
+    return berHu
+
 # poly_order: highest degree on x in the polynomial (e.g., t^2 + t => 2)
 # timepoints: list of future timepoints (offset from current) at which to
 #   produce outputs
-# returns: Bx4xT Tensor, with batch size B, 4 parameters, and T timepoints
+# returns: Bx4xTx2 Tensor, with batch size B, 4 parameters, T timepoints, and
+#   a parameter mean and stdev per (parameter, timepoint)
 def define_poly_network(poly_order, timepoints):
     poly_input = layers.Input(shape=(40, ), name="g_input")
     x = layers.Dense(64, activation="relu")(poly_input)
     x = layers.Dense(64, activation="relu")(x)
     x = layers.Dense(64, activation="relu")(x)
-    # x = layers.Dense(64, activation="relu")(x)
-    # x = layers.Dense(64, activation="relu")(x)
-    # x = layers.Dense(64, activation="relu")(x)
-    coeffs = layers.Dense(4 * poly_order, activation="linear")(x)
-    coeffs = layers.Reshape((4, poly_order), name="coeffs")(coeffs)
+
+    # coeffs: for each output dimension, (a, b, c, ..., sigma), where sigma is
+    #   the confidence value
+    coeffs = layers.Dense(
+        4 * poly_order + 1, activation="linear", name="coeffs")(x)
+    coeffs = layers.Reshape(4, poly_order + 1)(coeffs)
+
+    # timepoints: PxT for P polynomial coefficients, i.e.
+    # [  t_0   t_1  ... ]
+    # [ t_0^2 t_1^2 ... ]
+    # [ ...    ...  ... ]
     timepoints = K.constant(
         [[pow(t, i) for t in timepoints] for i in range(1, poly_order + 1)])
-    output_op = layers.Lambda(lambda x: K.dot(x, timepoints), name="transforms")
 
-    poly_output = output_op(coeffs)
-    M = models.Model(inputs=[poly_input], outputs=[poly_output, coeffs], name='poly_regressor')
+    # generate distribution mean and standard deviation
+    # the mean is computed as c_1 * t^P + c_2 * t^{P-1} + ... + c_P * t
+    # the std. dev. is computed as (exp(sigma) + 1e-6) * t
+    kSigmaMin = 1e-6  # avoid poor conditioning
+    mu = layers.Lambda(lambda x: K.dot(x, timepoints))(coeffs[...,:-1])
+    sigma = layers.Lambda(
+            lambda x: (K.exp(x) + kSigmaMin)[:,:,tf.newaxis] * timepoints[0,:])(
+        coeffs[...,-1])
+
+    output = layers.concatenate([mu[...,tf.newaxis], sigma[...,tf.newaxis]])
+
+    M = models.Model(inputs=[poly_input], outputs=[output, coeffs], name='poly_regressor')
 
     return M
 
 
-def get_model_poly(output_dir, poly_order, timepoints, optimizer=None):
+def get_model_poly(output_dir, poly_order, timepoints, tau, optimizer=None):
     K.set_learning_phase(1)
     M = define_poly_network(poly_order, timepoints)
 
@@ -52,7 +89,7 @@ def get_model_poly(output_dir, poly_order, timepoints, optimizer=None):
     else:
         raise Exception('Must specify optimizer.')
 
-    M.compile(optimizer=adam, loss={'transforms': smoothL1})
+    M.compile(optimizer=adam, loss={'transforms': berHu_generator(tau)})
     print(M.summary())
 
     # Add model outputs to return values

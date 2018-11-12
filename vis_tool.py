@@ -181,7 +181,7 @@ def calc_metrics(anchor, target_transform, generated_transform, sample_set=None)
     return iou, de
 
 def calc_metrics_mult(anchor, target_transforms, generated_transforms, sample_set=None):
-    """ Calculates displacement error and IoU metrics """
+    """ Calculates displacement error and IoU metrics for 0.5 and 1.0 sec predictions"""
 
     ious = np.empty(2)
     des = np.empty(2)

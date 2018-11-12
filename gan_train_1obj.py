@@ -47,7 +47,7 @@ def plot_loss(model_name, epochs, nb_steps, steps_per_epoch, output_dir, M_losse
     #     ax1.plot(x_steps, G_losses[:, 1], label='g_loss_adv')
 
     # ax1.plot(x_steps, G_losses[:, 2], label='smoothL1')
-    ax1.plot(x_steps, M_losses, label='smoothL1')
+    ax1.plot(x_steps, M_losses, label='loss')
     ax1.plot(x_steps, train_ious[:, 0], label='iou +0.5s')
     ax1.plot(x_steps, train_ious[:, 1], label='iou +1.0s')
     # ax1.plot(x_steps, train_des, label='DE')
@@ -57,7 +57,7 @@ def plot_loss(model_name, epochs, nb_steps, steps_per_epoch, output_dir, M_losse
     #     ax1.plot(x_epochs, val_losses[:, 0], label='val_g_loss')
     #     ax1.plot(x_epochs, val_losses[:, 1], label='val_g_loss_adv')
     # ax1.plot(x_epochs, val_losses[:, 2], label='val_smoothL1')
-    ax1.plot(x_epochs, val_losses, label='val_smoothL1')
+    ax1.plot(x_epochs, val_losses, label='val_loss')
     ax1.plot(x_epochs, val_ious[:, 0], label='val_iou +0.5s')
     ax1.plot(x_epochs, val_ious[:, 1], label='val_iou +1.0s')
     # ax1.plot(x_epochs, val_des, label='val_DE')
@@ -288,8 +288,8 @@ if __name__ == '__main__':
             data_cols.append(char + str(fNum))
     label_cols = []
     label_dim = 0
-    epochs = 300
-    batch_size = 4096 #4096  #7811  #15623 #1024  # 128, 64
+    epochs = 1000
+    batch_size = 2048 #4096 #4096  #7811  #15623 #1024  # 128, 64
     # steps_per_epoch = num_samples // batch_size  # ~1 epoch (35082 / 32 =~ 1096, 128: 274, 35082: 1)  # interval (in steps) at which to log loss summaries and save plots of image samples to disc
     # nb_steps = steps_per_epoch*epochs  # 50000 # Add one for logging of the last interval
     starting_step = 0
@@ -305,7 +305,7 @@ if __name__ == '__main__':
                 'beta_2': .999,     # default: .999
                 'decay': 0       # default: 0
                 }
-    model_name = 'berhu_logtsteps_VEHICLES_6-fold_1s-pred_G3-64_D3-32_w-adv{}_{}-lr{}-b1{}-b2{}_bs{}_kd{}_kg{}_epochs{}'.format(
+    model_name = 'sigma_huber_logsig_red-mean_one-reduce_t1_VEHICLES_6-fold_1s-pred_G3-64_D3-32_w-adv{}_{}-lr{}-b1{}-b2{}_bs{}_kd{}_kg{}_epochs{}'.format(
         w_adv, optimizer['name'], optimizer['lr'], optimizer['beta_1'], optimizer['beta_2'], batch_size, k_d, k_g, epochs
         )
     # model_name = 'maxGAN_SHOW-D-LEARN_1s-pred_G6-64_D3-32_w-adv{}_{}-lr{}-b1{}-b2{}_bs{}_kd{}_kg{}_epochs{}'.format(

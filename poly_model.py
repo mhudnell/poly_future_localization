@@ -31,14 +31,52 @@ def berHu_generator(tau):
 
         abs_diff = tf.abs(y_true - mu)
         squared_diff = tf.square(y_true - mu)
-        loss = tf.reduce_sum(tf.where(
-            tf.less(abs_diff, tau * sigma),
-            tau * (0.5 * tau - abs_diff / sigma),
-            0.5 * squared_diff / tf.square(sigma)))
+        # loss = tf.reduce_mean(tf.where(
+        #     tf.less(abs_diff, tau * sigma),
+        #     abs_diff / sigma, #tau * (0.5 * tau - 
+        #     0.5 * squared_diff / tf.square(sigma)))
 
-        confidence_penalty = tf.reduce_sum(tf.log(sigma))
+        # confidence_penalty = tf.reduce_mean(tf.log(sigma))
 
-        return loss + confidence_penalty
+        # return loss + confidence_penalty
+
+    #=====================
+        # berhu_loss = tf.where(
+        #     tf.less(abs_diff, tau * sigma),
+        #     tau * (0.5 * tau - abs_diff / sigma),
+        #     0.5 * squared_diff / tf.square(sigma))
+        
+        # confidence_penalty = tf.log(sigma)
+
+        # return tf.reduce_mean(tf.add(berhu_loss, confidence_penalty))
+
+    #=====================
+        # berhu_loss_v2 = tf.where(
+        #     tf.less(abs_diff, tau * sigma),
+        #     abs_diff / sigma,
+        #     0.5 * squared_diff / tf.square(sigma))
+        
+        # confidence_penalty = tf.log(sigma)
+
+        # return tf.reduce_mean(tf.add(berhu_loss, confidence_penalty))
+
+    #=====================
+        huber_loss = tf.where(
+            tf.less(abs_diff, 1),
+            tf.scalar_mul(0.5, squared_diff) / tf.square(sigma),
+            (abs_diff - 0.5) / sigma)
+        
+        confidence_penalty = tf.log(sigma)
+
+        return tf.reduce_sum(tf.add(huber_loss, confidence_penalty))
+
+    #=====================
+        # normal_nll = tf.divide(squared_diff, tf.square(sigma))
+        
+        # confidence_penalty = tf.log(sigma)
+
+        # return tf.reduce_mean(tf.add(normal_nll, confidence_penalty))
+
 
     return berHu
 
@@ -177,6 +215,8 @@ def train_poly(x_train, x_val, y_train, y_val, train_info, val_info, model_compo
                 val_batch_ious[j], val_batch_des[j] = calc_metrics_mult(val_input[j][-4:], val_target[j], gen_transforms[j])
 
             # Print first sample.
+            print(gen_transforms[0, :, 4])
+            print(gen_transforms[0, :, 9])
             # t_bb = data_extract_1obj.transform(val_input[0][-4:], val_target[0][:, 9])
             # t_bb = data_extract_1obj.unnormalize_bb(t_bb, sample_set=None)
             # g_bb = data_extract_1obj.transform(val_input[0][-4:], y_preds[0][:, 9])

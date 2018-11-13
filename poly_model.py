@@ -75,8 +75,9 @@ def define_poly_network(poly_order, timepoints):
     kSigmaMin = 1e-3  # avoid poor conditioning
     mu = layers.Lambda(lambda x: K.dot(x[...,:-2], timepoints))(coeffs)
     sigma = layers.Lambda(
-        lambda x: K.abs(
-                x[...,-2,tf.newaxis] + x[...,-1,tf.newaxis] * timepoints[0,:]) +
+        lambda x: 
+            K.abs(x[...,-1,tf.newaxis] * timepoints[0,:]) +
+            K.exp(x[...,-2,tf.newaxis]) +
             kSigmaMin))(
         coeffs)
     

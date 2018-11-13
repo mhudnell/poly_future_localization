@@ -19,6 +19,22 @@ def smoothL1(y_true, y_pred):
     condition = tf.less(tmp, 1.)
     return tf.reduce_sum(tf.where(condition, tf.scalar_mul(0.5, tf.square(tmp)), tmp - 0.5), axis=-1)
 
+def huber_generator(tau):
+
+    def smoothL1(y_true, y_pred):
+        abs_diff = tf.abs(y_pred - y_true)
+        condition = tf.less(abs_diff, tau)
+
+        out = tf.reduce_sum(
+            tf.where(
+                condition,
+                tf.scalar_mul(0.5, tf.square(abs_diff)),
+                tau*(abs_diff - 0.5*tau)),
+                axis=-1)
+        return out
+
+    return smoothL1
+
 # poly_order: highest degree on x in the polynomial (e.g., t^2 + t => 2)
 # timepoints: list of future timepoints (offset from current) at which to
 #   produce outputs
@@ -43,7 +59,7 @@ def define_poly_network(poly_order, timepoints):
     return M
 
 
-def get_model_poly(output_dir, poly_order, timepoints, optimizer=None):
+def get_model_poly(output_dir, poly_order, timepoints, tau, optimizer=None):
     K.set_learning_phase(1)
     M = define_poly_network(poly_order, timepoints)
 
@@ -52,7 +68,7 @@ def get_model_poly(output_dir, poly_order, timepoints, optimizer=None):
     else:
         raise Exception('Must specify optimizer.')
 
-    M.compile(optimizer=adam, loss={'transforms': smoothL1})
+    M.compile(optimizer=adam, loss={'transforms': huber_generator(tau)})
     print(M.summary())
 
     # Add model outputs to return values

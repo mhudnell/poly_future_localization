@@ -121,6 +121,7 @@ def train_single(model_specs, train_sets, val_sets, dataset='kitti_tracking'):
 
     poly_order = 4
     timepoints = np.linspace(0.1, 1.0, 10)
+    tau = 2. # huber threshold is tau * sigma
 
     # Get Data
     if dataset == 'kitti_tracking':
@@ -128,8 +129,8 @@ def train_single(model_specs, train_sets, val_sets, dataset='kitti_tracking'):
         # train_data, train_data_info = data_extract_1obj.get_kitti_data(train_sets)
         # val_data, val_data_info = data_extract_1obj.get_kitti_data(val_sets)
     elif dataset == 'kitti_raw_tracklets':
-        x_train, y_train, train_info = data_extract_1obj.get_kitti_raw_tracklets(timepoints, sets=train_sets, class_types=['Car'])
-        x_val, y_val, val_info = data_extract_1obj.get_kitti_raw_tracklets(timepoints, sets=val_sets, class_types=['Car'])
+        x_train, y_train, train_info = data_extract_1obj.get_kitti_raw_tracklets(timepoints, sets=train_sets)   # , class_types=['Car']
+        x_val, y_val, val_info = data_extract_1obj.get_kitti_raw_tracklets(timepoints, sets=val_sets)  # , class_types=['Car']
         print(x_train.shape, x_train.shape[0] / (x_train.shape[0] + x_val.shape[0]))
         print(x_val.shape, x_val.shape[0] / (x_train.shape[0] + x_val.shape[0]))
     else:
@@ -144,7 +145,7 @@ def train_single(model_specs, train_sets, val_sets, dataset='kitti_tracking'):
 
     # Get Model
     
-    M = poly_model.get_model_poly(output_dir, poly_order, timepoints, optimizer=optimizer)
+    M = poly_model.get_model_poly(output_dir, poly_order, timepoints, tau, optimizer=optimizer)
 
     # Train Model
     model_components = [model_name, starting_step, data_cols,
@@ -288,11 +289,12 @@ if __name__ == '__main__':
             data_cols.append(char + str(fNum))
     label_cols = []
     label_dim = 0
-    epochs = 700
-    batch_size = 2048 #4096  #7811  #15623 #1024  # 128, 64
+    epochs = 500
+    batch_size = 1024 #4096  #7811  #15623 #1024  # 128, 64
     # steps_per_epoch = num_samples // batch_size  # ~1 epoch (35082 / 32 =~ 1096, 128: 274, 35082: 1)  # interval (in steps) at which to log loss summaries and save plots of image samples to disc
     # nb_steps = steps_per_epoch*epochs  # 50000 # Add one for logging of the last interval
     starting_step = 0
+    seed = 11
 
     k_d = 0  # 1 number of discriminator network updates per adversarial training step
     k_g = 1  # 1 number of generator network updates per adversarial training step
@@ -305,8 +307,8 @@ if __name__ == '__main__':
                 'beta_2': .999,     # default: .999
                 'decay': 0       # default: 0
                 }
-    model_name = 'quartic_no-hflip_seed-11_CARS_7-fold_G3-64_D3-32_w-adv{}_{}-lr{}-b1{}-b2{}_bs{}_kd{}_kg{}_epochs{}'.format(
-        w_adv, optimizer['name'], optimizer['lr'], optimizer['beta_1'], optimizer['beta_2'], batch_size, k_d, k_g, epochs
+    model_name = 'quartic_t2._no-hflip_seed-{}_VEHICLES-NOBIKE_7-fold_G3-64_{}-lr{}-b1{}-b2{}_bs{}_epochs{}'.format(
+        seed, optimizer['name'], optimizer['lr'], optimizer['beta_1'], optimizer['beta_2'], batch_size, epochs
         )
     # model_name = 'maxGAN_SHOW-D-LEARN_1s-pred_G6-64_D3-32_w-adv{}_{}-lr{}-b1{}-b2{}_bs{}_kd{}_kg{}_epochs{}'.format(
     #     w_adv, optimizer['name'], optimizer['lr'], optimizer['beta_1'], optimizer['beta_2'], batch_size, k_d, k_g, epochs
@@ -335,4 +337,4 @@ if __name__ == '__main__':
     # Train final k-fold model over all training / validation data
     # train_k_fold_joint(6, model_specs)
     # train_k_fold_joint(6, model_specs, dataset='kitti_raw_tracklets', seed=10, stopping_epoch=None)
-    train_k_fold_joint(7, model_specs, dataset='kitti_raw_tracklets', seed=11, stopping_epoch=None)
+    train_k_fold_joint(7, model_specs, dataset='kitti_raw_tracklets', seed=seed, stopping_epoch=None)

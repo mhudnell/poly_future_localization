@@ -21,13 +21,17 @@ def smoothL1(y_true, y_pred):
 
 # returns the Huber loss without assuming a fixed sigma in the distribution
 # tau: threshold for the distribution switch
-def huber_generator(tau):
+def huber_generator(tau):  # tau, k
     # y_true: Bx4xTx1 (keras requires this to be 4 dimensions)
     # y_pred: Bx4xTx2 (mean, stdev)
     def huber(y_true, y_pred):
         mu, sigma = y_pred[...,0], y_pred[...,1]
+        mu = tf.reshape(mu, [-1,4,10,1])
+        sigma = tf.reshape(sigma, [-1,4,10,1])
 
         inv_sigma_sq = 1. / tf.square(sigma)
+        # tau = k*sigma
+        # tau = tf.clip_by_value(tau, 0.0, 1.0)
 
         abs_diff = tf.abs(y_true - mu)
         squared_diff = tf.square(y_true - mu)
@@ -41,7 +45,7 @@ def huber_generator(tau):
             (2. / tau) * tf.square(sigma) * tf.exp(
                 (-0.5 * tau * tau) * inv_sigma_sq))
 
-        return tf.reduce_sum(tf.add(huber_loss, confidence_penalty))
+        return tf.reduce_mean(tf.add(huber_loss, confidence_penalty))
 
     return huber
 
@@ -78,7 +82,7 @@ def define_poly_network(poly_order, timepoints):
         lambda x: 
             K.abs(x[...,-1,tf.newaxis] * timepoints[0,:]) +
             K.exp(x[...,-2,tf.newaxis]) +
-            kSigmaMin))(
+            kSigmaMin)(
         coeffs)
     
     output = layers.Lambda(

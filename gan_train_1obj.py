@@ -35,29 +35,34 @@ def plot_loss(model_name, epochs, nb_steps, steps_per_epoch, output_dir, M_losse
               train_ious, val_ious, train_des, val_des, show_adv=True): #, avg_gen_pred, avg_real_pred, 
     # PLOT LOSS
     x_steps = np.arange(1, nb_steps+1) / steps_per_epoch
+    x_epochs = np.arange(1, epochs+1)
+    fig = plt.figure(figsize=(18, 12), dpi=72)
+    ax1 = fig.add_subplot(111)
+    # ax1.set_ylim([0.0, 1.0])
+
+    ax1.plot(x_steps, M_losses, label='loss')
+    ax1.plot(x_epochs, val_losses, label='val_loss')
+
+    ax1.legend(loc=3)
+    fig.suptitle(model_name, fontsize=12)
+    plt.xlabel('epoch', fontsize=18)
+    plt.ylabel('loss value', fontsize=16)
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, 'loss_plot.png'))
+
+    # PLOT IOU
     fig = plt.figure(figsize=(18, 12), dpi=72)
     ax1 = fig.add_subplot(111)
     ax1.set_ylim([0.0, 1.0])
 
-    # # ax1.plot(x, D_losses[:, 0], label='d_loss')
-    # if show_adv:
-    #     ax1.plot(x_steps, D_losses[:, 1], label='d_loss_real')
-    #     ax1.plot(x_steps, D_losses[:, 2], label='d_loss_fake')
-    #     ax1.plot(x_steps, G_losses[:, 0], label='g_loss')
-    #     ax1.plot(x_steps, G_losses[:, 1], label='g_loss_adv')
-
-    # ax1.plot(x_steps, G_losses[:, 2], label='smoothL1')
-    ax1.plot(x_steps, M_losses, label='loss')
+    # ax1.plot(x_steps, M_losses, label='loss')
     ax1.plot(x_steps, train_ious[:, 0], label='iou +0.5s')
     ax1.plot(x_steps, train_ious[:, 1], label='iou +1.0s')
     # ax1.plot(x_steps, train_des, label='DE')
 
-    x_epochs = np.arange(1, epochs+1)
-    # if show_adv:
-    #     ax1.plot(x_epochs, val_losses[:, 0], label='val_g_loss')
-    #     ax1.plot(x_epochs, val_losses[:, 1], label='val_g_loss_adv')
-    # ax1.plot(x_epochs, val_losses[:, 2], label='val_smoothL1')
-    ax1.plot(x_epochs, val_losses, label='val_loss')
+    # x_epochs = np.arange(1, epochs+1)
+    # ax1.plot(x_epochs, val_losses, label='val_loss')
     ax1.plot(x_epochs, val_ious[:, 0], label='val_iou +0.5s')
     ax1.plot(x_epochs, val_ious[:, 1], label='val_iou +1.0s')
     # ax1.plot(x_epochs, val_des, label='val_DE')
@@ -68,7 +73,7 @@ def plot_loss(model_name, epochs, nb_steps, steps_per_epoch, output_dir, M_losse
     plt.ylabel('loss value', fontsize=16)
 
     plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, 'loss_plot.png'))
+    plt.savefig(os.path.join(output_dir, 'iou_plot.png'))
     # plt.show()
 
     # PLOT DISCRIM PREDICTIONS
@@ -121,7 +126,7 @@ def train_single(model_specs, train_sets, val_sets, dataset='kitti_tracking'):
 
     poly_order = 4
     timepoints = np.linspace(0.1, 1.0, 10)
-    tau = 1. # berHu threshold is tau * sigma
+    tau = .1 # berHu threshold is tau * sigma
 
     # Get Data
     if dataset == 'kitti_tracking':
@@ -129,8 +134,8 @@ def train_single(model_specs, train_sets, val_sets, dataset='kitti_tracking'):
         # train_data, train_data_info = data_extract_1obj.get_kitti_data(train_sets)
         # val_data, val_data_info = data_extract_1obj.get_kitti_data(val_sets)
     elif dataset == 'kitti_raw_tracklets':
-        x_train, y_train, train_info = data_extract_1obj.get_kitti_raw_tracklets(timepoints, sets=train_sets)
-        x_val, y_val, val_info = data_extract_1obj.get_kitti_raw_tracklets(timepoints, sets=val_sets)
+        x_train, y_train, train_info = data_extract_1obj.get_kitti_raw_tracklets(timepoints, sets=train_sets, class_types=['Car', 'Van', 'Truck'])
+        x_val, y_val, val_info = data_extract_1obj.get_kitti_raw_tracklets(timepoints, sets=val_sets, class_types=['Car', 'Van', 'Truck'])
         # print(train_data.shape, train_data.shape[0] / (train_data.shape[0] + val_data.shape[0]))
         # print(val_data.shape, val_data.shape[0] / (train_data.shape[0] + val_data.shape[0]))
     else:
@@ -187,7 +192,7 @@ def train_k_fold(k, model_specs, dataset='kitti_tracking', seed=6):
     all_ious = np.empty((k, epochs))
     all_DEs = np.empty((k, epochs))
     for i in range(k):
-        model_specs[-1] = output_dir + 'fold-' + str(i) + '/'
+        model_specs[-1] = os.path.join(output_dir, 'fold-' + str(i))
 
         train_sets = np.setdiff1d(remaining, validation_groups[i])
         [val_losses, val_ious, val_DEs] = train_single(model_specs, train_sets, validation_groups[i], dataset=dataset)
@@ -236,7 +241,7 @@ def train_k_fold_joint(k, model_specs, dataset='kitti_tracking', seed=6, stoppin
         train_sets = np.setdiff1d(all_sets, test_sets)
     elif dataset == 'kitti_raw_tracklets':
         all_sets = np.arange(38)
-        test_sets = np.random.choice(all_sets, 8, replace=False)
+        test_sets = np.random.choice(all_sets, 10, replace=False)
         train_sets = np.setdiff1d(all_sets, test_sets)
     else:
         raise Exception("`dataset` parameter must be one of: ['kitti_tracking', 'kitti_raw_tracklets']")
@@ -288,11 +293,12 @@ if __name__ == '__main__':
             data_cols.append(char + str(fNum))
     label_cols = []
     label_dim = 0
-    epochs = 1000
-    batch_size = 2048 #4096 #4096  #7811  #15623 #1024  # 128, 64
+    epochs = 800
+    batch_size = 512 #4096 #4096  #7811  #15623 #1024  # 128, 64
     # steps_per_epoch = num_samples // batch_size  # ~1 epoch (35082 / 32 =~ 1096, 128: 274, 35082: 1)  # interval (in steps) at which to log loss summaries and save plots of image samples to disc
     # nb_steps = steps_per_epoch*epochs  # 50000 # Add one for logging of the last interval
     starting_step = 0
+    seed = 11
 
     k_d = 0  # 1 number of discriminator network updates per adversarial training step
     k_g = 1  # 1 number of generator network updates per adversarial training step
@@ -300,13 +306,13 @@ if __name__ == '__main__':
 
     optimizer = {
                 'name': 'adam',
-                'lr': .0005,        # default: .001
+                'lr': .001,        # default: .001
                 'beta_1': .9,       # default: .9
                 'beta_2': .999,     # default: .999
                 'decay': 0       # default: 0
                 }
-    model_name = 'sigma_huber_logsig_red-mean_one-reduce_t1_VEHICLES_6-fold_1s-pred_G3-64_D3-32_w-adv{}_{}-lr{}-b1{}-b2{}_bs{}_kd{}_kg{}_epochs{}'.format(
-        w_adv, optimizer['name'], optimizer['lr'], optimizer['beta_1'], optimizer['beta_2'], batch_size, k_d, k_g, epochs
+    model_name = 'sigma-2coeff_huber_t.1_seed-{}_VEHICLES-NOBIKE_7-fold_G3-64_{}-lr{}-b1{}-b2{}_bs{}_epochs{}'.format(
+        seed, optimizer['name'], optimizer['lr'], optimizer['beta_1'], optimizer['beta_2'], batch_size, epochs
         )
     # model_name = 'maxGAN_SHOW-D-LEARN_1s-pred_G6-64_D3-32_w-adv{}_{}-lr{}-b1{}-b2{}_bs{}_kd{}_kg{}_epochs{}'.format(
     #     w_adv, optimizer['name'], optimizer['lr'], optimizer['beta_1'], optimizer['beta_2'], batch_size, k_d, k_g, epochs
@@ -334,4 +340,4 @@ if __name__ == '__main__':
 
     # Train final k-fold model over all training / validation data
     # train_k_fold_joint(6, model_specs)
-    train_k_fold_joint(6, model_specs, dataset='kitti_raw_tracklets', seed=10, stopping_epoch=None)
+    train_k_fold_joint(7, model_specs, dataset='kitti_raw_tracklets', seed=seed, stopping_epoch=None)

@@ -155,7 +155,7 @@ def get_kitti_data(sets, normalize=True, transform=True):
 
         return np.asarray(samples), samples_info
 
-def get_kitti_raw_tracklets(timepoints, sets=None, normalize=True, use_occluded=True):
+def get_kitti_raw_tracklets(timepoints, sets=None, normalize=True, use_occluded=True, class_types=['Car', 'Van', 'Truck']):
     """
     Parse kitti tracklet files and construct a set of samples [input X and targets Y].
 
@@ -173,8 +173,8 @@ def get_kitti_raw_tracklets(timepoints, sets=None, normalize=True, use_occluded=
 
     future_frames = (timepoints*10).astype(int)
     num_required_frames = future_frames[-1]
-    print('future_frames:', future_frames)
-    print('num_required_frames:', num_required_frames)
+    # print('future_frames:', future_frames)
+    # print('num_required_frames:', num_required_frames)
 
     root = "F:\\Car data\\kitti\\data_raw_with_tracklets\\2011_09_26"
     for i, seq in enumerate(os.listdir(root)):
@@ -199,7 +199,7 @@ def get_kitti_raw_tracklets(timepoints, sets=None, normalize=True, use_occluded=
                     continue
 
                 # Add classes to include all vehicles, or pedestrians.
-                if object_class not in ['Car', 'Van', 'Truck', 'Cyclist']:     #        # 'Pedestrian'
+                if object_class not in class_types:     # , 'Cyclist'       # 'Pedestrian'
                     continue
 
                 L = float(words[6])
@@ -299,6 +299,16 @@ def get_batch_ids(num_samples, batch_size, seed=None):
     indices = np.random.choice(num_samples, size=batch_size, replace=False)
 
     return indices
+
+def random_flip_batch(x_batch, y_batch):
+    """Randomly flips cx of bounding box, negates transformation, for all samps"""
+    assert (x_batch.shape[-2:] == (10, 4)), "x_batch must be shape (?, 10, 4)"
+    assert (y_batch.shape[-2:] == (4, 10)), "y_batch must be shape (?, 4, 10)"
+
+    if np.random.randint(0, 1):
+        x_batch[:, :, 0] = 1 - x_batch[:, :, 0]
+        y_batch[:, 0, :] = -y_batch[:, 0, :]
+
 
 def scale_bb(bb, sample_set, desired_res):
     """
@@ -427,11 +437,36 @@ if __name__ == '__main__':
 
     # samples, samples_info = get_kitti_raw_data()
     timepoints = np.linspace(0.1, 1.0, 10)
-    x, y, samples_info = get_kitti_raw_tracklets(timepoints, use_occluded=True)
+    x_all, y_all, samples_info = get_kitti_raw_tracklets(timepoints, use_occluded=True, class_types=['Car', 'Van', 'Truck', 'Cyclist'])
 
-    print('x shape:', x.shape)
+    print('x shape:', x_all.shape)
+    print('y shape:', y_all.shape)
+    print('info length:', len(samples_info))
+
+    x, y, samples_info = get_kitti_raw_tracklets(timepoints, use_occluded=True, class_types=['Car'])
+
+    print('x shape:', x.shape, x.shape[0] / x_all.shape[0])
     print('y shape:', y.shape)
     print('info length:', len(samples_info))
 
-    print(x[0])
-    print(y[0])
+    x, y, samples_info = get_kitti_raw_tracklets(timepoints, use_occluded=True, class_types=['Van'])
+
+    print('x shape:', x.shape, x.shape[0] / x_all.shape[0])
+    print('y shape:', y.shape)
+    print('info length:', len(samples_info))
+
+    x, y, samples_info = get_kitti_raw_tracklets(timepoints, use_occluded=True, class_types=['Truck'])
+
+    print('x shape:', x.shape, x.shape[0] / x_all.shape[0])
+    print('y shape:', y.shape)
+    print('info length:', len(samples_info))
+
+    x, y, samples_info = get_kitti_raw_tracklets(timepoints, use_occluded=True, class_types=['Cyclist'])
+
+    print('x shape:', x.shape, x.shape[0] / x_all.shape[0])
+    print('y shape:', y.shape)
+    print('info length:', len(samples_info))
+    # print(x[0])
+    # print(y[0])
+
+    # x, y, samples_info = get_kitti_raw_tracklets(timepoints, sets=[24, 32,  2, 12,  7,  5, 33,  3], use_occluded=True, class_types=['Cyclist'])

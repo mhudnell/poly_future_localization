@@ -128,10 +128,10 @@ def train_single(model_specs, train_sets, val_sets, dataset='kitti_tracking'):
         # train_data, train_data_info = data_extract_1obj.get_kitti_data(train_sets)
         # val_data, val_data_info = data_extract_1obj.get_kitti_data(val_sets)
     elif dataset == 'kitti_raw_tracklets':
-        x_train, y_train, train_info = data_extract_1obj.get_kitti_raw_tracklets(timepoints, sets=train_sets)
-        x_val, y_val, val_info = data_extract_1obj.get_kitti_raw_tracklets(timepoints, sets=val_sets)
-        # print(train_data.shape, train_data.shape[0] / (train_data.shape[0] + val_data.shape[0]))
-        # print(val_data.shape, val_data.shape[0] / (train_data.shape[0] + val_data.shape[0]))
+        x_train, y_train, train_info = data_extract_1obj.get_kitti_raw_tracklets(timepoints, sets=train_sets, class_types=['Car'])
+        x_val, y_val, val_info = data_extract_1obj.get_kitti_raw_tracklets(timepoints, sets=val_sets, class_types=['Car'])
+        print(x_train.shape, x_train.shape[0] / (x_train.shape[0] + x_val.shape[0]))
+        print(x_val.shape, x_val.shape[0] / (x_train.shape[0] + x_val.shape[0]))
     else:
         raise Exception("`dataset` parameter must be one of: ['kitti_tracking', 'kitti_raw_tracklets']")
 
@@ -176,7 +176,7 @@ def train_k_fold(k, model_specs, dataset='kitti_tracking', seed=6):
         validation_groups = np.random.choice(remaining, (k, len(remaining)//k), replace=False)
     elif dataset == 'kitti_raw_tracklets':
         all_sets = np.arange(38)
-        test_sets = np.random.choice(all_sets, 8, replace=False)
+        test_sets = np.random.choice(all_sets, 10, replace=False)
         remaining = np.setdiff1d(all_sets, test_sets)
         validation_groups = np.random.choice(remaining, (k, len(remaining)//k), replace=False)
     else:
@@ -226,7 +226,7 @@ def train_k_fold(k, model_specs, dataset='kitti_tracking', seed=6):
 
 def train_k_fold_joint(k, model_specs, dataset='kitti_tracking', seed=6, stopping_epoch=None):
     output_dir = model_specs[-1]
-    model_specs[-1] = output_dir + 'joint' + '/'
+    model_specs[-1] = os.path.join(output_dir, 'joint')
 
     np.random.seed(seed)
     if dataset == 'kitti_tracking':
@@ -235,8 +235,9 @@ def train_k_fold_joint(k, model_specs, dataset='kitti_tracking', seed=6, stoppin
         train_sets = np.setdiff1d(all_sets, test_sets)
     elif dataset == 'kitti_raw_tracklets':
         all_sets = np.arange(38)
-        test_sets = np.random.choice(all_sets, 8, replace=False)
+        test_sets = np.random.choice(all_sets, 10, replace=False)
         train_sets = np.setdiff1d(all_sets, test_sets)
+        print(test_sets)
     else:
         raise Exception("`dataset` parameter must be one of: ['kitti_tracking', 'kitti_raw_tracklets']")
 
@@ -264,7 +265,7 @@ def train_k_fold_joint(k, model_specs, dataset='kitti_tracking', seed=6, stoppin
     print("Final IoU ({}): {}".format(final_epoch, test_ious[-1]))
     print("Final DE ({}): {}".format(final_epoch, test_DEs[-1]))
 
-    resultsFile = open(model_specs[-1] + 'results.txt', 'w')
+    resultsFile = open(os.path.join(model_specs[-1], 'results.txt'), 'w')
     print("Training / Testing completed. Showing test scores:\n", file=resultsFile)
     if stopping_epoch:
         print("smoothL1 at stopping_epoch({}): {}".format(stopping_epoch, test_losses[stopping_epoch - 1, 2]), file=resultsFile)
@@ -288,7 +289,7 @@ if __name__ == '__main__':
     label_cols = []
     label_dim = 0
     epochs = 700
-    batch_size = 4096 #4096  #7811  #15623 #1024  # 128, 64
+    batch_size = 2048 #4096  #7811  #15623 #1024  # 128, 64
     # steps_per_epoch = num_samples // batch_size  # ~1 epoch (35082 / 32 =~ 1096, 128: 274, 35082: 1)  # interval (in steps) at which to log loss summaries and save plots of image samples to disc
     # nb_steps = steps_per_epoch*epochs  # 50000 # Add one for logging of the last interval
     starting_step = 0
@@ -304,7 +305,7 @@ if __name__ == '__main__':
                 'beta_2': .999,     # default: .999
                 'decay': 0       # default: 0
                 }
-    model_name = 'quartic_logtsteps_VEHICLES_6-fold_1s-pred_G3-64_D3-32_w-adv{}_{}-lr{}-b1{}-b2{}_bs{}_kd{}_kg{}_epochs{}'.format(
+    model_name = 'quartic_no-hflip_seed-11_CARS_7-fold_G3-64_D3-32_w-adv{}_{}-lr{}-b1{}-b2{}_bs{}_kd{}_kg{}_epochs{}'.format(
         w_adv, optimizer['name'], optimizer['lr'], optimizer['beta_1'], optimizer['beta_2'], batch_size, k_d, k_g, epochs
         )
     # model_name = 'maxGAN_SHOW-D-LEARN_1s-pred_G6-64_D3-32_w-adv{}_{}-lr{}-b1{}-b2{}_bs{}_kd{}_kg{}_epochs{}'.format(
@@ -333,4 +334,5 @@ if __name__ == '__main__':
 
     # Train final k-fold model over all training / validation data
     # train_k_fold_joint(6, model_specs)
-    train_k_fold_joint(6, model_specs, dataset='kitti_raw_tracklets', seed=10, stopping_epoch=None)
+    # train_k_fold_joint(6, model_specs, dataset='kitti_raw_tracklets', seed=10, stopping_epoch=None)
+    train_k_fold_joint(7, model_specs, dataset='kitti_raw_tracklets', seed=11, stopping_epoch=None)

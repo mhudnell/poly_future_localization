@@ -10,7 +10,7 @@ import tensorflow as tf
 import os
 import re
 
-from vis_tool import drawFrameRects, get_IoU, Rect, calc_metrics, calc_metrics_polynomial
+from vis_tool import drawFrameRects, get_IoU, Rect, calc_metrics, calc_metrics_polynomial, calc_metrics_mult
 import data_extract_1obj
 
 
@@ -96,24 +96,26 @@ def train_poly(x_train, x_val, y_train, y_val, train_info, val_info, model_compo
         os.makedirs(os.path.join(output_dir, 'weights'))
     lossFile = open(os.path.join(output_dir, 'losses.txt'), 'w')
 
-    for i in range(1, nb_steps+1):  # range(1, nb_steps+1)
+    for i in range(1, nb_steps+1):
         K.set_learning_phase(1)
         batch_ids = data_extract_1obj.get_batch_ids(len(x_train), batch_size)
-        gen_input = x_train[batch_ids].reshape((batch_size, 40))
+        gen_input = x_train[batch_ids]
         gen_target = y_train[batch_ids]
 
-        ### TRAIN (y = 1) bc want pos feedback for tricking discrim (want discrim to output 1)
+        # Randomly flip horizontally
+        # data_extract_1obj.random_flip_batch(gen_input, gen_target)
+        gen_input = gen_input.reshape((batch_size, 40))
         M_loss = M.train_on_batch(gen_input, {'transforms': gen_target})
         # print('M_loss:', len(M_loss))
         # print(M_loss[2][0])
         # print(M_loss[3][0])
-        coeffs = M_loss[3]
+        gen_transforms = M_loss[2]
 
         # Calculate IoU and DE metrics.
         batch_ious = np.empty((batch_size, 2))
         batch_des = np.empty((batch_size, 2))
         for j in range(batch_size):
-            batch_ious[j], batch_des[j] = calc_metrics_polynomial(gen_input[j][-4:], gen_target[j], coeffs[j])
+            batch_ious[j], batch_des[j] = calc_metrics_mult(gen_input[j][-4:], gen_target[j], gen_transforms[j])
 
         avg_iou = np.mean(batch_ious, axis=0)
         avg_de = np.mean(batch_des, axis=0)
@@ -130,12 +132,13 @@ def train_poly(x_train, x_val, y_train, y_val, train_info, val_info, model_compo
             # Evaluate on validation set
             num_val_samples = len(val_input)
             val_loss = M.test_on_batch(val_input, {'transforms': val_target})
-            coeffs = val_loss[3]
+            # coeffs = val_loss[3]
+            gen_transforms = val_loss[2]
 
             val_batch_ious = np.empty((num_val_samples, 2))
             val_batch_des = np.empty((num_val_samples, 2))
             for j in range(num_val_samples):
-                val_batch_ious[j], val_batch_des[j] = calc_metrics_polynomial(val_input[j][-4:], val_target[j], coeffs[j])
+                val_batch_ious[j], val_batch_des[j] = calc_metrics_mult(val_input[j][-4:], val_target[j], gen_transforms[j])
 
             # Print first sample.
             # t_bb = data_extract_1obj.transform(val_input[0][-4:], val_target[0][:, 9])

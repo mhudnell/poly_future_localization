@@ -198,18 +198,20 @@ def train_k_fold(k, model_specs, dataset='kitti_tracking', seed=6):
     else:
         raise Exception("`dataset` parameter must be one of: ['kitti_tracking', 'kitti_raw_tracklets']")
 
-    all_smoothl1 = np.empty((k, epochs[0]+epochs[1]))
+    all_smoothl1 = np.zeros((k, epochs[0]+epochs[1]))
     all_ious = np.empty((k, epochs[0]+epochs[1]))
     all_DEs = np.empty((k, epochs[0]+epochs[1]))
     for i in range(k):
-        model_specs[-1] = output_dir + 'fold-' + str(i) + '/'
+        model_specs[-1] = os.path.join(output_dir, 'fold-' + str(i))
 
         train_sets = np.setdiff1d(remaining, validation_groups[i])
         [val_losses, val_ious, val_DEs] = train_single(model_specs, train_sets, validation_groups[i], dataset=dataset)
 
-        all_smoothl1[i] = val_losses[:, 2].flatten()
-        all_ious[i] = val_ious
-        all_DEs[i] = val_DEs
+        print(val_ious.shape, len(val_ious))
+        # print("HEY", all_smoothl1.shape, val_losses[:, 2].flatten().shape)
+        # all_smoothl1[i] = val_losses[:, 0].flatten()
+        all_ious[i] = val_ious[:, 1]
+        all_DEs[i] = val_DEs[:, 1]
 
     avgs_smoothl1 = np.mean(all_smoothl1, axis=0)
     min_smoothl1_idx = np.argmin(avgs_smoothl1)
@@ -310,7 +312,7 @@ if __name__ == '__main__':
     # steps_per_epoch = num_samples // batch_size  # ~1 epoch (35082 / 32 =~ 1096, 128: 274, 35082: 1)  # interval (in steps) at which to log loss summaries and save plots of image samples to disc
     # nb_steps = steps_per_epoch*epochs  # 50000 # Add one for logging of the last interval
     starting_step = 0
-    seed = 13
+    seed = 10
 
     k_d = 0  # 1 number of discriminator network updates per adversarial training step
     k_g = 1  # 1 number of generator network updates per adversarial training step
@@ -350,9 +352,9 @@ if __name__ == '__main__':
     # # Perform k-fold cross validation
     # train_k_fold(6, model_specs)
     # train_k_fold(6, model_specs, dataset='kitti_raw_tracklets', seed=10)
-    # train_k_fold(7, model_specs, dataset='kitti_raw_tracklets', seed=seed)
+    train_k_fold(7, model_specs, dataset='kitti_raw_tracklets', seed=seed)
 
     # Train final k-fold model over all training / validation data
     # train_k_fold_joint(6, model_specs)
     # train_k_fold_joint(6, model_specs, dataset='kitti_raw_tracklets', seed=10, stopping_epoch=None)
-    train_k_fold_joint(7, model_specs, dataset='kitti_raw_tracklets', seed=seed, stopping_epoch=None)
+    # train_k_fold_joint(7, model_specs, dataset='kitti_raw_tracklets', seed=seed, stopping_epoch=None)

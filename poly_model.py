@@ -118,7 +118,7 @@ def train_poly(x_train, x_val, y_train, y_val, train_info, val_info, model_compo
     curr_steps_per_epoch = steps_per_epoch_0
     for i in range(1, nb_steps+1):
 
-        if i == steps_per_epoch_0*epochs[0]:
+        if i == steps_per_epoch_0*epochs[0] + 1:
             print("SWITCHING BATCH SIZE", batch_size[1])
             curr_batch_size = batch_size[1]
             curr_steps_per_epoch = steps_per_epoch_1

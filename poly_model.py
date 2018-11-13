@@ -19,66 +19,31 @@ def smoothL1(y_true, y_pred):
     condition = tf.less(tmp, 1.)
     return tf.reduce_sum(tf.where(condition, tf.scalar_mul(0.5, tf.square(tmp)), tmp - 0.5), axis=-1)
 
-# returns the berHu loss without assuming a fixed sigma in the distribution
-# tau: threshold for the distribution switch, which is multiplied by sigma
-def berHu_generator(tau):
+# returns the Huber loss without assuming a fixed sigma in the distribution
+# tau: threshold for the distribution switch
+def huber_generator(tau):
     # y_true: Bx4xTx1 (keras requires this to be 4 dimensions)
     # y_pred: Bx4xTx2 (mean, stdev)
-    def berHu(y_true, y_pred):
+    def huber(y_true, y_pred):
         mu, sigma = y_pred[...,0], y_pred[...,1]
-        mu = tf.reshape(mu, [-1,4,10,1])
-        sigma = tf.reshape(sigma, [-1,4,10,1])
+
+        inv_sigma_sq = 1. / tf.square(sigma)
 
         abs_diff = tf.abs(y_true - mu)
         squared_diff = tf.square(y_true - mu)
-        # loss = tf.reduce_mean(tf.where(
-        #     tf.less(abs_diff, tau * sigma),
-        #     abs_diff / sigma, #tau * (0.5 * tau - 
-        #     0.5 * squared_diff / tf.square(sigma)))
-
-        # confidence_penalty = tf.reduce_mean(tf.log(sigma))
-
-        # return loss + confidence_penalty
-
-    #=====================
-        # berhu_loss = tf.where(
-        #     tf.less(abs_diff, tau * sigma),
-        #     tau * (0.5 * tau - abs_diff / sigma),
-        #     0.5 * squared_diff / tf.square(sigma))
+        huber_loss = inv_sigma_sq * tf.where(
+            tf.less(abs_diff, tau),
+            0.5 * squared_diff,
+            (tau * abs_diff - 0.5 * tau * tau))
         
-        # confidence_penalty = tf.log(sigma)
-
-        # return tf.reduce_mean(tf.add(berhu_loss, confidence_penalty))
-
-    #=====================
-        # berhu_loss_v2 = tf.where(
-        #     tf.less(abs_diff, tau * sigma),
-        #     abs_diff / sigma,
-        #     0.5 * squared_diff / tf.square(sigma))
-        
-        # confidence_penalty = tf.log(sigma)
-
-        # return tf.reduce_mean(tf.add(berhu_loss, confidence_penalty))
-
-    #=====================
-        huber_loss = tf.where(
-            tf.less(abs_diff, 1),
-            tf.scalar_mul(0.5, squared_diff) / tf.square(sigma),
-            (abs_diff - 0.5) / sigma)
-        
-        confidence_penalty = tf.log(sigma)
+        confidence_penalty = tf.log(
+            sigma * np.sqrt(2. * np.pi) * tf.erf((tau / np.sqrt(2.)) / sigma) +
+            (2. / tau) * tf.square(sigma) * tf.exp(
+                (-0.5 * tau * tau) * inv_sigma_sq))
 
         return tf.reduce_sum(tf.add(huber_loss, confidence_penalty))
 
-    #=====================
-        # normal_nll = tf.divide(squared_diff, tf.square(sigma))
-        
-        # confidence_penalty = tf.log(sigma)
-
-        # return tf.reduce_mean(tf.add(normal_nll, confidence_penalty))
-
-
-    return berHu
+    return huber
 
 # poly_order: highest degree on x in the polynomial (e.g., t^2 + t => 2)
 # timepoints: list of future timepoints (offset from current) at which to
@@ -94,8 +59,8 @@ def define_poly_network(poly_order, timepoints):
     # coeffs: for each output dimension, (a, b, c, ..., sigma), where sigma is
     #   the confidence value
     coeffs = layers.Dense(
-        4 * (poly_order + 1), activation="linear", name="coeffs")(x)
-    coeffs = layers.Reshape((4, poly_order + 1))(coeffs)
+        4 * (poly_order + 2), activation="linear", name="coeffs")(x)
+    coeffs = layers.Reshape((4, poly_order + 2))(coeffs)
 
     # timepoints: PxT for P polynomial coefficients, i.e.
     # [  t_0   t_1  ... ]
@@ -106,16 +71,20 @@ def define_poly_network(poly_order, timepoints):
 
     # generate distribution mean and standard deviation
     # the mean is computed as c_1 * t^P + c_2 * t^{P-1} + ... + c_P * t
-    # the std. dev. is computed as (exp(sigma) + 1e-6) * t
-    kSigmaMin = 1e-6  # avoid poor conditioning
-    mu = layers.Lambda(lambda x: K.dot(x[...,:-1], timepoints))(coeffs)
+    # the std. dev. is computed as |d_0 + d_1 * t| + eps
+    kSigmaMin = 1e-3  # avoid poor conditioning
+    mu = layers.Lambda(lambda x: K.dot(x[...,:-2], timepoints))(coeffs)
     sigma = layers.Lambda(
-            lambda x: (K.exp(x[...,-1,tf.newaxis]) + kSigmaMin) * timepoints[0,:])(
+        lambda x: K.abs(
+                x[...,-2,tf.newaxis] + x[...,-1,tf.newaxis] * timepoints[0,:]) +
+            kSigmaMin))(
         coeffs)
     
-    output = layers.Lambda(lambda x: K.stack(x, axis=-1), name="transforms")([mu, sigma])
+    output = layers.Lambda(
+        lambda x: K.stack(x, axis=-1), name="transforms")([mu, sigma])
 
-    M = models.Model(inputs=[poly_input], outputs=[output, coeffs], name='poly_regressor')
+    M = models.Model(
+        inputs=[poly_input], outputs=[output, coeffs], name='poly_regressor')
 
     return M
 
@@ -129,7 +98,7 @@ def get_model_poly(output_dir, poly_order, timepoints, tau, optimizer=None):
     else:
         raise Exception('Must specify optimizer.')
 
-    M.compile(optimizer=adam, loss={'transforms': berHu_generator(tau)})
+    M.compile(optimizer=adam, loss={'transforms': huber_generator(tau)})
     print(M.summary())
 
     # Add model outputs to return values

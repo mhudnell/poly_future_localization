@@ -155,7 +155,7 @@ def get_kitti_data(sets, normalize=True, transform=True):
 
         return np.asarray(samples), samples_info
 
-def get_kitti_raw_tracklets(timepoints, sets=None, normalize=True, use_occluded=True):
+def get_kitti_raw_tracklets(timepoints, sets=None, normalize=True, use_occluded=True, class_types=['Car', 'Van', 'Truck']):
     """
     Parse kitti tracklet files and construct a set of samples [input X and targets Y].
 
@@ -199,7 +199,7 @@ def get_kitti_raw_tracklets(timepoints, sets=None, normalize=True, use_occluded=
                     continue
 
                 # Add classes to include all vehicles, or pedestrians.
-                if object_class not in ['Car', 'Van', 'Truck', 'Cyclist']:     #        # 'Pedestrian'
+                if object_class not in class_types:     #        # 'Pedestrian', 'Cyclist'
                     continue
 
                 L = float(words[6])

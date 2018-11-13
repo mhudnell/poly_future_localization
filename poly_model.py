@@ -89,12 +89,14 @@ def train_poly(x_train, x_val, y_train, y_val, train_info, val_info, model_compo
      M,
      epochs, batch_size, k_d, k_g,
      show, output_dir] = model_components
-    steps_per_epoch = len(x_train) // batch_size
-    nb_steps = steps_per_epoch*epochs
+    steps_per_epoch_0 = len(x_train) // batch_size[0]
+    steps_per_epoch_1 = len(x_train) // batch_size[1]
+    num_total_epochs = epochs[0] + epochs[1]
+    nb_steps = steps_per_epoch_0*epochs[0] + steps_per_epoch_1*epochs[1]
     val_input = x_val.reshape((len(x_val), 40))
     val_target = y_val
 
-    print('len(x_train):', len(x_train), 'batch_size:', batch_size, 'steps_per_epoch:', steps_per_epoch)
+    # print('len(x_train):', len(x_train), 'batch_size:', batch_size, 'steps_per_epoch:', steps_per_epoch)
     print('x_train: ', x_train.shape)
     print('x_val: ', x_val.shape)
     print('y_train: ', y_train.shape)
@@ -102,25 +104,33 @@ def train_poly(x_train, x_val, y_train, y_val, train_info, val_info, model_compo
 
     # Store loss values for returning.
     M_losses = np.empty(nb_steps)          # [smoothL1]
-    val_losses = np.empty(epochs)
+    val_losses = np.empty(num_total_epochs)
     train_ious = np.empty((nb_steps, 2))    # Store .5 and 1.0 sec predictions
-    val_ious = np.empty((epochs, 2))
+    val_ious = np.empty((num_total_epochs, 2))
     train_des = np.empty((nb_steps, 2))
-    val_des = np.empty((epochs, 2))
+    val_des = np.empty((num_total_epochs, 2))
 
     if not os.path.exists(os.path.join(output_dir, 'weights')):
         os.makedirs(os.path.join(output_dir, 'weights'))
     lossFile = open(os.path.join(output_dir, 'losses.txt'), 'w')
 
+    curr_batch_size = batch_size[0]
+    curr_steps_per_epoch = steps_per_epoch_0
     for i in range(1, nb_steps+1):
+
+        if i == steps_per_epoch_0*epochs[0]:
+            print("SWITCHING BATCH SIZE", batch_size[1])
+            curr_batch_size = batch_size[1]
+            curr_steps_per_epoch = steps_per_epoch_1
+
         K.set_learning_phase(1)
-        batch_ids = data_extract_1obj.get_batch_ids(len(x_train), batch_size)
+        batch_ids = data_extract_1obj.get_batch_ids(len(x_train), curr_batch_size)
         gen_input = x_train[batch_ids]
         gen_target = y_train[batch_ids]
 
         # Randomly flip horizontally
         # data_extract_1obj.random_flip_batch(gen_input, gen_target)
-        gen_input = gen_input.reshape((batch_size, 40))
+        gen_input = gen_input.reshape((curr_batch_size, 40))
         M_loss = M.train_on_batch(gen_input, {'transforms': gen_target})
         # print('M_loss:', len(M_loss))
         # print(M_loss[2][0])
@@ -128,9 +138,9 @@ def train_poly(x_train, x_val, y_train, y_val, train_info, val_info, model_compo
         gen_transforms = M_loss[2]
 
         # Calculate IoU and DE metrics.
-        batch_ious = np.empty((batch_size, 2))
-        batch_des = np.empty((batch_size, 2))
-        for j in range(batch_size):
+        batch_ious = np.empty((curr_batch_size, 2))
+        batch_des = np.empty((curr_batch_size, 2))
+        for j in range(curr_batch_size):
             batch_ious[j], batch_des[j] = calc_metrics_mult(gen_input[j][-4:], gen_target[j], gen_transforms[j])
 
         avg_iou = np.mean(batch_ious, axis=0)
@@ -141,9 +151,10 @@ def train_poly(x_train, x_val, y_train, y_val, train_info, val_info, model_compo
         train_des[i-1] = avg_de
 
         # Evaluate on validation / Save weights / Log loss every epoch
-        if not i % steps_per_epoch:
+        if not i % curr_steps_per_epoch:
             K.set_learning_phase(0)
-            epoch = i // steps_per_epoch
+            # epoch = i // curr_steps_per_epoch
+            epoch = min(i, steps_per_epoch_0*epochs[0]) // steps_per_epoch_0 + max(0, i-steps_per_epoch_0*epochs[0]) // steps_per_epoch_1
 
             # Evaluate on validation set
             num_val_samples = len(val_input)
@@ -172,7 +183,7 @@ def train_poly(x_train, x_val, y_train, y_val, train_info, val_info, model_compo
             val_des[epoch-1] = val_avg_de
 
             # Log loss info to console / file
-            print('Epoch: {} of {}'.format(epoch, nb_steps // steps_per_epoch))
+            print('Epoch: {} of {}'.format(epoch, num_total_epochs))    # nb_steps // steps_per_epoch
             print('train_losses: {}'.format(M_losses[i-1]))
             print('val_losses: {}'.format(val_losses[epoch-1]))
             print('train_ious: {}'.format(train_ious[i-1]))
@@ -180,7 +191,7 @@ def train_poly(x_train, x_val, y_train, y_val, train_info, val_info, model_compo
             print('train_des: {}'.format(train_des[i-1]))
             print('val_des: {}'.format(val_des[epoch-1]))
             
-            print('Epoch: {} of {}'.format(epoch, nb_steps // steps_per_epoch), file=lossFile)
+            print('Epoch: {} of {}'.format(epoch, num_total_epochs), file=lossFile) # nb_steps // steps_per_epoch
             print('train_losses: {}'.format(M_losses[i-1]), file=lossFile)
             print('val_losses: {}'.format(val_losses[epoch-1]), file=lossFile)
             print('train_ious: {}'.format(train_ious[i-1]), file=lossFile)

@@ -34,7 +34,19 @@ def log_hyperparams(model_name=None, output_dir=None, train_sets=None, val_sets=
 def plot_loss(model_name, epochs, nb_steps, steps_per_epoch, output_dir, M_losses, val_losses,
               train_ious, val_ious, train_des, val_des, show_adv=True): #, avg_gen_pred, avg_real_pred, 
     # PLOT LOSS
-    x_steps = np.arange(1, nb_steps+1) / steps_per_epoch
+    # stop_0 = steps_per_epoch[0]*epochs[0]+1
+    # stop_1 = stop_0 + steps_per_epoch[1]*epochs[1]
+    # x_steps = np.hstack((np.arange(1, stop_0) / steps_per_epoch[0],
+    #   np.arange(stop_0, stop_1) / steps_per_epoch[1]))
+
+    x_steps = np.concatenate((
+        np.linspace(0, epochs[0], num=steps_per_epoch[0]*epochs[0]+1)[1:], 
+        np.linspace(epochs[0], epochs[0]+epochs[1], num=steps_per_epoch[1]*epochs[1]+1)[1:]
+    ))
+    # print(np.linspace(0, epochs[0], num=steps_per_epoch[0]*epochs[0]+1)[1:])
+    # print(np.linspace(epochs[0], epochs[0]+epochs[1], num=steps_per_epoch[1]*epochs[1]+1)[1:])
+    # print(x_steps)
+
     fig = plt.figure(figsize=(18, 12), dpi=72)
     ax1 = fig.add_subplot(111)
     ax1.set_ylim([0.0, 1.0])
@@ -52,7 +64,7 @@ def plot_loss(model_name, epochs, nb_steps, steps_per_epoch, output_dir, M_losse
     ax1.plot(x_steps, train_ious[:, 1], label='iou +1.0s')
     # ax1.plot(x_steps, train_des, label='DE')
 
-    x_epochs = np.arange(1, epochs+1)
+    x_epochs = np.arange(1, epochs[0]+epochs[1]+1)
     # if show_adv:
     #     ax1.plot(x_epochs, val_losses[:, 0], label='val_g_loss')
     #     ax1.plot(x_epochs, val_losses[:, 1], label='val_g_loss_adv')
@@ -121,7 +133,7 @@ def train_single(model_specs, train_sets, val_sets, dataset='kitti_tracking'):
 
     poly_order = 4
     timepoints = np.linspace(0.1, 1.0, 10)
-    tau = 2. # huber threshold is tau * sigma
+    tau = 1. # huber threshold is tau * sigma
 
     # Get Data
     if dataset == 'kitti_tracking':
@@ -137,8 +149,10 @@ def train_single(model_specs, train_sets, val_sets, dataset='kitti_tracking'):
         raise Exception("`dataset` parameter must be one of: ['kitti_tracking', 'kitti_raw_tracklets']")
 
     # Log hyperparameters
-    steps_per_epoch = len(x_train) // batch_size
-    nb_steps = steps_per_epoch*epochs
+    steps_per_epoch_0 = len(x_train) // batch_size[0]
+    steps_per_epoch_1 = len(x_train) // batch_size[1]
+    steps_per_epoch = [steps_per_epoch_0, steps_per_epoch_1]
+    nb_steps = steps_per_epoch_0*epochs[0] + steps_per_epoch_1*epochs[1]
     log_hyperparams(model_name=model_name, output_dir=output_dir, train_sets=train_sets, val_sets=val_sets,
                     epochs=epochs, batch_size=batch_size, k_d=k_d, k_g=k_g, optimizer=optimizer, show=show,
                     dataset=dataset)
@@ -168,6 +182,7 @@ def train_single(model_specs, train_sets, val_sets, dataset='kitti_tracking'):
 def train_k_fold(k, model_specs, dataset='kitti_tracking', seed=6):
     """Perform k-fold cross validation"""
     output_dir = model_specs[-1]
+    epochs = model_specs[-6]
 
     np.random.seed(seed)
     if dataset == 'kitti_tracking':
@@ -183,9 +198,9 @@ def train_k_fold(k, model_specs, dataset='kitti_tracking', seed=6):
     else:
         raise Exception("`dataset` parameter must be one of: ['kitti_tracking', 'kitti_raw_tracklets']")
 
-    all_smoothl1 = np.empty((k, epochs))
-    all_ious = np.empty((k, epochs))
-    all_DEs = np.empty((k, epochs))
+    all_smoothl1 = np.empty((k, epochs[0]+epochs[1]))
+    all_ious = np.empty((k, epochs[0]+epochs[1]))
+    all_DEs = np.empty((k, epochs[0]+epochs[1]))
     for i in range(k):
         model_specs[-1] = output_dir + 'fold-' + str(i) + '/'
 
@@ -289,12 +304,13 @@ if __name__ == '__main__':
             data_cols.append(char + str(fNum))
     label_cols = []
     label_dim = 0
-    epochs = 500
-    batch_size = 1024 #4096  #7811  #15623 #1024  # 128, 64
+    # epochs = 500
+    epochs = [200, 200]
+    batch_size = [1024, 4096] #4096  #7811  #15623 #1024  # 128, 64
     # steps_per_epoch = num_samples // batch_size  # ~1 epoch (35082 / 32 =~ 1096, 128: 274, 35082: 1)  # interval (in steps) at which to log loss summaries and save plots of image samples to disc
     # nb_steps = steps_per_epoch*epochs  # 50000 # Add one for logging of the last interval
     starting_step = 0
-    seed = 11
+    seed = 13
 
     k_d = 0  # 1 number of discriminator network updates per adversarial training step
     k_g = 1  # 1 number of generator network updates per adversarial training step
@@ -307,12 +323,13 @@ if __name__ == '__main__':
                 'beta_2': .999,     # default: .999
                 'decay': 0       # default: 0
                 }
-    model_name = 'quartic_t2._no-hflip_seed-{}_VEHICLES-NOBIKE_7-fold_G3-64_{}-lr{}-b1{}-b2{}_bs{}_epochs{}'.format(
-        seed, optimizer['name'], optimizer['lr'], optimizer['beta_1'], optimizer['beta_2'], batch_size, epochs
-        )
-    # model_name = 'maxGAN_SHOW-D-LEARN_1s-pred_G6-64_D3-32_w-adv{}_{}-lr{}-b1{}-b2{}_bs{}_kd{}_kg{}_epochs{}'.format(
-    #     w_adv, optimizer['name'], optimizer['lr'], optimizer['beta_1'], optimizer['beta_2'], batch_size, k_d, k_g, epochs
+    # model_name = 'quartic_t1._no-hflip_seed-{}_VEHICLES-NOBIKE_7-fold_G3-64_{}-lr{}-b1{}-b2{}_bs{}_epochs{}'.format(
+    #     seed, optimizer['name'], optimizer['lr'], optimizer['beta_1'], optimizer['beta_2'], batch_size, epochs
     #     )
+    model_name = 'quartic_t1._no-hflip_seed-{}_VEHICLES-NOBIKE_7-fold_G3-64_{}-lr{}-b1{}-b2{}_bs{}-{}_epochs{}-{}'.format(
+        seed, optimizer['name'], optimizer['lr'], optimizer['beta_1'], optimizer['beta_2'], batch_size[0], batch_size[1], epochs[0], epochs[1]
+        )
+
     # TODO (True): change output directory
     output_dir = os.path.join('C:\\Users\\Max\\Research\\maxGAN\\models\\', model_name)
     show = True
@@ -333,6 +350,7 @@ if __name__ == '__main__':
     # # Perform k-fold cross validation
     # train_k_fold(6, model_specs)
     # train_k_fold(6, model_specs, dataset='kitti_raw_tracklets', seed=10)
+    # train_k_fold(7, model_specs, dataset='kitti_raw_tracklets', seed=seed)
 
     # Train final k-fold model over all training / validation data
     # train_k_fold_joint(6, model_specs)

@@ -176,7 +176,7 @@ def get_kitti_raw_tracklets(timepoints, sets=None, normalize=True, use_occluded=
     print('future_frames:', future_frames)
     print('num_required_frames:', num_required_frames)
 
-    root = "F:\\Car data\\kitti\\data_raw_with_tracklets\\2011_09_26"
+    root = "/data/b/mhudnell_cvpr_2019/2011_09_26_tracklets_only"
     for i, seq in enumerate(os.listdir(root)):
         # print(i, seq)
         seq_dir = os.path.join(root, seq)
@@ -299,6 +299,16 @@ def get_batch_ids(num_samples, batch_size, seed=None):
     indices = np.random.choice(num_samples, size=batch_size, replace=False)
 
     return indices
+
+def random_flip_batch(x_batch, y_batch):
+    """Randomly flips cx of bounding box, negates transformation, for all samps"""
+    assert (x_batch.shape[-2:] == (10, 4)), "x_batch must be shape (?, 10, 4)"
+    assert (y_batch.shape[-2:] == (4, 10)), "y_batch must be shape (?, 4, 10)"
+
+    if np.random.randint(0, 1):
+        x_batch[:, :, 0] = 1 - x_batch[:, :, 0]
+        y_batch[:, 0, :] = -y_batch[:, 0, :]
+
 
 def scale_bb(bb, sample_set, desired_res):
     """

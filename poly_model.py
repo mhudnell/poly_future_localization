@@ -1,11 +1,13 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from keras import applications
-from keras import backend as K
-from keras import layers
-from keras import models
-from keras import optimizers
-from keras import losses
+from tensorflow.contrib import keras
+#from keras import applications
+from tensorflow.python.keras import applications
+from tensorflow.python.keras import backend as K
+from tensorflow.python.keras import layers
+from tensorflow.python.keras import models
+from tensorflow.python.keras import optimizers
+from tensorflow.python.keras import losses
 import tensorflow as tf
 import os
 import re
@@ -21,7 +23,7 @@ def smoothL1(y_true, y_pred):
 
 # returns the Huber loss without assuming a fixed sigma in the distribution
 # tau: threshold for the distribution switch
-def huber_generator(tau):  # tau, k
+def huber_generator(k):  # tau, k
     # y_true: Bx4xTx1 (keras requires this to be 4 dimensions)
     # y_pred: Bx4xTx2 (mean, stdev)
     def huber(y_true, y_pred):
@@ -30,7 +32,7 @@ def huber_generator(tau):  # tau, k
         sigma = tf.reshape(sigma, [-1,4,10,1])
 
         inv_sigma_sq = 1. / tf.square(sigma)
-        # tau = k*sigma
+        tau = k*sigma
         # tau = tf.clip_by_value(tau, 0.0, 1.0)
 
         abs_diff = tf.abs(y_true - mu)
@@ -45,7 +47,7 @@ def huber_generator(tau):  # tau, k
             (2. / tau) * tf.square(sigma) * tf.exp(
                 (-0.5 * tau * tau) * inv_sigma_sq))
 
-        return tf.reduce_mean(tf.add(huber_loss, confidence_penalty))
+        return tf.reduce_sum(tf.add(huber_loss, confidence_penalty))
 
     return huber
 
@@ -59,6 +61,7 @@ def define_poly_network(poly_order, timepoints):
     x = layers.Dense(64, activation="relu")(poly_input)
     x = layers.Dense(64, activation="relu")(x)
     x = layers.Dense(64, activation="relu")(x)
+    #x = layers.Dense(64, activation="relu")(x)
 
     # coeffs: for each output dimension, (a, b, c, ..., sigma), where sigma is
     #   the confidence value
@@ -81,7 +84,7 @@ def define_poly_network(poly_order, timepoints):
     sigma = layers.Lambda(
         lambda x: 
             K.abs(x[...,-1,tf.newaxis] * timepoints[0,:]) +
-            K.exp(x[...,-2,tf.newaxis]) +
+	    K.abs(x[...,-2,tf.newaxis]) +
             kSigmaMin)(
         coeffs)
     
@@ -94,12 +97,13 @@ def define_poly_network(poly_order, timepoints):
     return M
 
 
-def get_model_poly(output_dir, poly_order, timepoints, tau, optimizer=None):
+def get_model_poly(output_dir, poly_order, timepoints, tau, optimizer=None, weights_path=None):
     K.set_learning_phase(1)
     M = define_poly_network(poly_order, timepoints)
 
     if optimizer and optimizer['name']=='adam':
-        adam = optimizers.Adam(lr=optimizer['lr'], beta_1=optimizer['beta_1'], beta_2=optimizer['beta_2'], decay=optimizer['decay'])
+        adam = optimizers.Adam(lr=optimizer['lr'], beta_1=optimizer['beta_1'],
+           beta_2=optimizer['beta_2'], decay=optimizer['decay'], amsgrad=False)
     else:
         raise Exception('Must specify optimizer.')
 
@@ -114,6 +118,10 @@ def get_model_poly(output_dir, poly_order, timepoints, tau, optimizer=None):
     # Log model structure to json
     # with open(os.path.join(output_dir, 'M_model.json'), "w") as f:
     #     f.write(M.to_json(indent=4))
+
+    if weights_path:
+        print('Loading model')
+        M.load_weights(weights_path, by_name=True)
 
     return M
 
@@ -152,7 +160,12 @@ def train_poly(x_train, x_val, y_train, y_val, train_info, val_info, model_compo
         batch_ids = data_extract_1obj.get_batch_ids(len(x_train), batch_size)
         gen_input = x_train[batch_ids].reshape((batch_size, 40))
         gen_target = y_train[batch_ids].reshape((batch_size, 4, 10, 1))
+        #gen_input = x_train[batch_ids]
+        #gen_target = y_train[batch_ids]
 
+        #data_extract_1obj.random_flip_batch(gen_input, gen_target)
+        #gen_input = gen_input.reshape((batch_size, 40))
+        #gen_target = gen_target.reshape((batch_size, 4, 10, 1))
         ### TRAIN (y = 1) bc want pos feedback for tricking discrim (want discrim to output 1)
         M_loss = M.train_on_batch(gen_input, {'transforms': gen_target})
         # print('M_loss:', len(M_loss))

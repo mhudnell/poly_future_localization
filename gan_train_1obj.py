@@ -1,5 +1,8 @@
-import gan_1obj
+#import gan_1obj
 import numpy as np
+import matplotlib
+# Force matplotlib to not use any Xwindows backend.
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import pickle
 import os
@@ -126,7 +129,7 @@ def train_single(model_specs, train_sets, val_sets, dataset='kitti_tracking'):
 
     poly_order = 4
     timepoints = np.linspace(0.1, 1.0, 10)
-    tau = .1 # berHu threshold is tau * sigma
+    tau = 1.345 # berHu threshold is tau * sigma
 
     # Get Data
     if dataset == 'kitti_tracking':
@@ -166,6 +169,28 @@ def train_single(model_specs, train_sets, val_sets, dataset='kitti_tracking'):
     # Plot losses
     plot_loss(model_name, epochs, nb_steps, steps_per_epoch, output_dir, M_losses, val_losses,
               train_ious, val_ious, train_des, val_des, show_adv=(w_adv != 0.0))
+
+    min_smoothl1_idx = np.argmin(val_losses)
+    max_iou_idx = np.argmax(val_ious, axis=0)
+    min_de_idx = np.argmin(val_des, axis=0)
+    final_epoch = len(val_ious)
+
+    print("Training / Testing completed. Showing test scores:\n")
+    print("Best smoothL1 ({}): {}".format(min_smoothl1_idx + 1, val_losses[min_smoothl1_idx]))
+    print("Best IoU ({}): {}".format(max_iou_idx + 1, val_ious[max_iou_idx]))
+    print("Best DE ({}): {}".format(min_de_idx + 1, val_des[min_de_idx]))
+    print("Final smoothL1 ({}): {}".format(final_epoch, val_losses[-1]))
+    print("Final IoU ({}): {}".format(final_epoch, val_ious[-1]))
+    print("Final DE ({}): {}".format(final_epoch, val_des[-1]))
+
+    resultsFile = open(os.path.join(model_specs[-1], 'results.txt'), 'w')
+    print("Training / Testing completed. Showing test scores:\n", file=resultsFile)
+    print("Best smoothL1 ({}): {}".format(min_smoothl1_idx + 1, val_losses[min_smoothl1_idx]), file=resultsFile)
+    print("Best IoU ({}): {}".format(max_iou_idx + 1, val_ious[max_iou_idx]), file=resultsFile)
+    print("Best DE ({}): {}".format(min_de_idx + 1, val_des[min_de_idx]), file=resultsFile)
+    print("Final smoothL1 ({}): {}".format(final_epoch, val_losses[-1]), file=resultsFile)
+    print("Final IoU ({}): {}".format(final_epoch, val_ious[-1]), file=resultsFile)
+    print("Final DE ({}): {}".format(final_epoch, val_des[-1]), file=resultsFile)
 
     return [val_losses, val_ious, val_des]
 
@@ -293,7 +318,7 @@ if __name__ == '__main__':
             data_cols.append(char + str(fNum))
     label_cols = []
     label_dim = 0
-    epochs = 800
+    epochs = 600
     batch_size = 512 #4096 #4096  #7811  #15623 #1024  # 128, 64
     # steps_per_epoch = num_samples // batch_size  # ~1 epoch (35082 / 32 =~ 1096, 128: 274, 35082: 1)  # interval (in steps) at which to log loss summaries and save plots of image samples to disc
     # nb_steps = steps_per_epoch*epochs  # 50000 # Add one for logging of the last interval
@@ -306,19 +331,19 @@ if __name__ == '__main__':
 
     optimizer = {
                 'name': 'adam',
-                'lr': .001,        # default: .001
+                'lr': .00146,        # default: .001
                 'beta_1': .9,       # default: .9
                 'beta_2': .999,     # default: .999
                 'decay': 0       # default: 0
                 }
-    model_name = 'sigma-2coeff_huber_t.1_seed-{}_VEHICLES-NOBIKE_7-fold_G3-64_{}-lr{}-b1{}-b2{}_bs{}_epochs{}'.format(
+    model_name = 'quartic_sigma-2coeff-abs_red-sum_huber_t1.345xsig_seed-{}-TEST0f_VEHICLES-NOBIKE_7-fold_G3-64_{}-lr{}-b1{}-b2{}_bs{}_epochs{}'.format(
         seed, optimizer['name'], optimizer['lr'], optimizer['beta_1'], optimizer['beta_2'], batch_size, epochs
         )
     # model_name = 'maxGAN_SHOW-D-LEARN_1s-pred_G6-64_D3-32_w-adv{}_{}-lr{}-b1{}-b2{}_bs{}_kd{}_kg{}_epochs{}'.format(
     #     w_adv, optimizer['name'], optimizer['lr'], optimizer['beta_1'], optimizer['beta_2'], batch_size, k_d, k_g, epochs
     #     )
-    # TODO (True): change output directory
-    output_dir = os.path.join('C:\\Users\\Max\\Research\\maxGAN\\models\\', model_name)
+
+    output_dir = os.path.join('/playpen/mhudnell_cvpr_2019/mhudnell/maxGAN/models', model_name)
     show = True
 
     # Train Model
@@ -328,11 +353,13 @@ if __name__ == '__main__':
                    show, output_dir]
 
     # # Train single model with random 30-8 split (kitti_raw_tracklets dataset)
-    # np.random.seed(6)
-    # all_sets = np.arange(38)
-    # test_sets = np.random.choice(all_sets, 8, replace=False)
-    # train_sets = np.setdiff1d(all_sets, test_sets)
-    # train_single(model_specs, train_sets, test_sets, dataset='kitti_raw_tracklets')
+    np.random.seed(11)
+    all_sets = np.arange(38)
+    test_sets = np.random.choice(all_sets, (3,10), replace=False)
+    remaining = np.setdiff1d(all_sets, test_sets[0])
+    #val_sets = np.random.choice(remaining, 5, replace=False) 
+    #train_sets = np.setdiff1d(remaining, val_sets)
+    train_single(model_specs, remaining, test_sets[0], dataset='kitti_raw_tracklets')
 
     # # Perform k-fold cross validation
     # train_k_fold(6, model_specs)
@@ -340,4 +367,4 @@ if __name__ == '__main__':
 
     # Train final k-fold model over all training / validation data
     # train_k_fold_joint(6, model_specs)
-    train_k_fold_joint(7, model_specs, dataset='kitti_raw_tracklets', seed=seed, stopping_epoch=None)
+    #train_k_fold_joint(7, model_specs, dataset='kitti_raw_tracklets', seed=seed, stopping_epoch=None)

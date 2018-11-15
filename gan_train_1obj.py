@@ -8,7 +8,9 @@ import pickle
 import os
 import logging
 import data_extract_1obj
-import poly_model
+import rnn_model
+
+OUTPUT_DIR = '/playpen/mhudnell_cvpr_2019/jtprice/maxGAN/models'
 
 def log_hyperparams(model_name=None, output_dir=None, train_sets=None, val_sets=None, epochs=None, batch_size=None, k_d=None, k_g=None, optimizer=None, show=None, dataset=None):
     if not os.path.exists(output_dir):
@@ -127,9 +129,10 @@ def train_single(model_specs, train_sets, val_sets, dataset='kitti_tracking'):
      epochs, batch_size, k_d, k_g,
      show, output_dir] = model_specs
 
-    poly_order = 4
+    hidden_layer_dim = 64
     timepoints = np.linspace(0.1, 1.0, 10)
-    tau = 1.345 # berHu threshold is tau * sigma
+    timepoint_step = 0.1
+    tau = 1.345 # huber threshold is tau * sigma
 
     # Get Data
     if dataset == 'kitti_tracking':
@@ -153,7 +156,9 @@ def train_single(model_specs, train_sets, val_sets, dataset='kitti_tracking'):
 
     # Get Model
     
-    M = poly_model.get_model_poly(output_dir, poly_order, timepoints, tau, optimizer=optimizer)
+    M = rnn_model.get_model_rnn(
+        output_dir, hidden_layer_dim, timepoints, timepoint_step ,tau,
+        optimizer=optimizer)
 
     # Train Model
     model_components = [model_name, starting_step, data_cols,
@@ -162,7 +167,7 @@ def train_single(model_specs, train_sets, val_sets, dataset='kitti_tracking'):
                         epochs, batch_size, k_d, k_g,
                         show, output_dir]
     # [G_losses, D_losses, val_losses, train_ious, val_ious, train_des, val_des, avg_gen_pred, avg_real_pred] = gan_1obj.training_steps_GAN(x_train, x_val, y_train, y_val, train_info, val_info, model_components)
-    [M_losses, val_losses, train_ious, val_ious, train_des, val_des] = poly_model.train_poly(x_train, x_val, y_train, y_val, train_info, val_info, model_components)
+    [M_losses, val_losses, train_ious, val_ious, train_des, val_des] = rnn_model.train_rnn(x_train, x_val, y_train, y_val, train_info, val_info, model_components)
     # Save losses
     save_losses(output_dir, val_losses, val_ious, val_des)
 
@@ -343,7 +348,7 @@ if __name__ == '__main__':
     #     w_adv, optimizer['name'], optimizer['lr'], optimizer['beta_1'], optimizer['beta_2'], batch_size, k_d, k_g, epochs
     #     )
 
-    output_dir = os.path.join('/playpen/mhudnell_cvpr_2019/mhudnell/maxGAN/models', model_name)
+    output_dir = os.path.join(OUTPUT_DIR, model_name)
     show = True
 
     # Train Model

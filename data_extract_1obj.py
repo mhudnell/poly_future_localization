@@ -155,7 +155,7 @@ def get_kitti_data(sets, normalize=True, transform=True):
 
         return np.asarray(samples), samples_info
 
-def get_kitti_raw_tracklets(timepoints, sets=None, normalize=True, use_occluded=True, class_types=['Car', 'Van', 'Truck']):
+def get_kitti_raw_tracklets(timepoints, sets=None, normalize=True, use_occluded=True, class_types=['Car', 'Van', 'Truck'], past_frames=10):
     """
     Parse kitti tracklet files and construct a set of samples [input X and targets Y].
 
@@ -222,9 +222,9 @@ def get_kitti_raw_tracklets(timepoints, sets=None, normalize=True, use_occluded=
                         if len(object_queue) == 10 + num_required_frames + 1:
                             object_queue.popleft()
 
-                        x_sample = np.empty((10, 4))
-                        for i in range(10):
-                            x_sample[i] = object_queue[i]
+                        x_sample = np.empty((past_frames, 4))
+                        for i in range(10-past_frames, 10):
+                            x_sample[i-(10-past_frames)] = object_queue[i]
 
                         y_sample = np.empty((4, len(future_frames)))
                         for i, j in enumerate(future_frames):

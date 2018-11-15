@@ -127,7 +127,8 @@ def train_single(model_specs, train_sets, val_sets, dataset='kitti_tracking'):
      epochs, batch_size, k_d, k_g,
      show, output_dir] = model_specs
 
-    poly_order = 4
+    past_frames = 10
+    poly_order = 7
     timepoints = np.linspace(0.1, 1.0, 10)
     tau = 1.345 # berHu threshold is tau * sigma
 
@@ -137,8 +138,8 @@ def train_single(model_specs, train_sets, val_sets, dataset='kitti_tracking'):
         # train_data, train_data_info = data_extract_1obj.get_kitti_data(train_sets)
         # val_data, val_data_info = data_extract_1obj.get_kitti_data(val_sets)
     elif dataset == 'kitti_raw_tracklets':
-        x_train, y_train, train_info = data_extract_1obj.get_kitti_raw_tracklets(timepoints, sets=train_sets, class_types=['Car', 'Van', 'Truck'])
-        x_val, y_val, val_info = data_extract_1obj.get_kitti_raw_tracklets(timepoints, sets=val_sets, class_types=['Car', 'Van', 'Truck'])
+        x_train, y_train, train_info = data_extract_1obj.get_kitti_raw_tracklets(timepoints, sets=train_sets, class_types=['Car', 'Van', 'Truck'], past_frames=past_frames)
+        x_val, y_val, val_info = data_extract_1obj.get_kitti_raw_tracklets(timepoints, sets=val_sets, class_types=['Car', 'Van', 'Truck'], past_frames=past_frames)
         # print(train_data.shape, train_data.shape[0] / (train_data.shape[0] + val_data.shape[0]))
         # print(val_data.shape, val_data.shape[0] / (train_data.shape[0] + val_data.shape[0]))
     else:
@@ -153,7 +154,7 @@ def train_single(model_specs, train_sets, val_sets, dataset='kitti_tracking'):
 
     # Get Model
     
-    M = poly_model.get_model_poly(output_dir, poly_order, timepoints, tau, optimizer=optimizer)
+    M = poly_model.get_model_poly(output_dir, poly_order, timepoints, tau, past_frames, optimizer=optimizer)
 
     # Train Model
     model_components = [model_name, starting_step, data_cols,
@@ -162,7 +163,7 @@ def train_single(model_specs, train_sets, val_sets, dataset='kitti_tracking'):
                         epochs, batch_size, k_d, k_g,
                         show, output_dir]
     # [G_losses, D_losses, val_losses, train_ious, val_ious, train_des, val_des, avg_gen_pred, avg_real_pred] = gan_1obj.training_steps_GAN(x_train, x_val, y_train, y_val, train_info, val_info, model_components)
-    [M_losses, val_losses, train_ious, val_ious, train_des, val_des] = poly_model.train_poly(x_train, x_val, y_train, y_val, train_info, val_info, model_components)
+    [M_losses, val_losses, train_ious, val_ious, train_des, val_des] = poly_model.train_poly(x_train, x_val, y_train, y_val, train_info, val_info, model_components, past_frames)
     # Save losses
     save_losses(output_dir, val_losses, val_ious, val_des)
 
@@ -336,14 +337,14 @@ if __name__ == '__main__':
                 'beta_2': .999,     # default: .999
                 'decay': 0       # default: 0
                 }
-    model_name = 'quartic_sigma-2coeff-abs_red-sum_huber_t1.345xsig_seed-{}-test0f_vehicles-nobike_7-fold_G3-64_{}-lr{}-b1{}-b2{}_bs{}_epochs{}'.format(
+    model_name = 'septic-test_t1.345xsig_seed-{}-test0f_vehicles-nobike_7-fold_G3-64_{}-lr{}-b1{}-b2{}_bs{}_epochs{}'.format(
         seed, optimizer['name'], optimizer['lr'], optimizer['beta_1'], optimizer['beta_2'], batch_size, epochs
         )
     # model_name = 'maxGAN_SHOW-D-LEARN_1s-pred_G6-64_D3-32_w-adv{}_{}-lr{}-b1{}-b2{}_bs{}_kd{}_kg{}_epochs{}'.format(
     #     w_adv, optimizer['name'], optimizer['lr'], optimizer['beta_1'], optimizer['beta_2'], batch_size, k_d, k_g, epochs
     #     )
 
-    output_dir = os.path.join('/playpen/mhudnell_cvpr_2019/mhudnell/maxGAN/models', model_name)
+    output_dir = os.path.join('/playpen/mhudnell_cvpr_2019/mhudnell/maxgan/models', model_name)
     show = True
 
     # Train Model

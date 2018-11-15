@@ -56,8 +56,8 @@ def huber_generator(k):  # tau, k
 #   produce outputs
 # returns: Bx4xTx2 Tensor, with batch size B, 4 parameters, T timepoints, and
 #   a parameter mean and stdev per (parameter, timepoint)
-def define_poly_network(poly_order, timepoints):
-    poly_input = layers.Input(shape=(40, ), name="g_input")
+def define_poly_network(poly_order, timepoints, past_frames):
+    poly_input = layers.Input(shape=(past_frames*4, ), name="g_input")
     x = layers.Dense(64, activation="relu")(poly_input)
     x = layers.Dense(64, activation="relu")(x)
     x = layers.Dense(64, activation="relu")(x)
@@ -97,9 +97,9 @@ def define_poly_network(poly_order, timepoints):
     return M
 
 
-def get_model_poly(output_dir, poly_order, timepoints, tau, optimizer=None, weights_path=None):
+def get_model_poly(output_dir, poly_order, timepoints, tau, past_frames, optimizer=None, weights_path=None):
     K.set_learning_phase(1)
-    M = define_poly_network(poly_order, timepoints)
+    M = define_poly_network(poly_order, timepoints, past_frames)
 
     if optimizer and optimizer['name']=='adam':
         adam = optimizers.Adam(lr=optimizer['lr'], beta_1=optimizer['beta_1'],
@@ -125,7 +125,7 @@ def get_model_poly(output_dir, poly_order, timepoints, tau, optimizer=None, weig
 
     return M
 
-def train_poly(x_train, x_val, y_train, y_val, train_info, val_info, model_components):
+def train_poly(x_train, x_val, y_train, y_val, train_info, val_info, model_components, past_frames):
     """ """
     [model_name, starting_step, data_cols,
      label_cols, label_dim,
@@ -134,7 +134,7 @@ def train_poly(x_train, x_val, y_train, y_val, train_info, val_info, model_compo
      show, output_dir] = model_components
     steps_per_epoch = len(x_train) // batch_size
     nb_steps = steps_per_epoch*epochs
-    val_input = x_val.reshape((len(x_val), 40))
+    val_input = x_val.reshape((len(x_val), past_frames*4))
     val_target = y_val.reshape((len(y_val), 4, 10, 1))
 
     print('len(x_train):', len(x_train), 'batch_size:', batch_size, 'steps_per_epoch:', steps_per_epoch)
@@ -158,7 +158,7 @@ def train_poly(x_train, x_val, y_train, y_val, train_info, val_info, model_compo
     for i in range(1, nb_steps+1):  # range(1, nb_steps+1)
         K.set_learning_phase(1)
         batch_ids = data_extract_1obj.get_batch_ids(len(x_train), batch_size)
-        gen_input = x_train[batch_ids].reshape((batch_size, 40))
+        gen_input = x_train[batch_ids].reshape((batch_size, past_frames*4))
         gen_target = y_train[batch_ids].reshape((batch_size, 4, 10, 1))
         #gen_input = x_train[batch_ids]
         #gen_target = y_train[batch_ids]
@@ -202,8 +202,8 @@ def train_poly(x_train, x_val, y_train, y_val, train_info, val_info, model_compo
                 val_batch_ious[j], val_batch_des[j] = calc_metrics_mult(val_input[j][-4:], val_target[j], gen_transforms[j])
 
             # Print first sample.
-            print(gen_transforms[0, :, 4])
-            print(gen_transforms[0, :, 9])
+            #print(gen_transforms[0, :, 4])
+            #print(gen_transforms[0, :, 9])
             # t_bb = data_extract_1obj.transform(val_input[0][-4:], val_target[0][:, 9])
             # t_bb = data_extract_1obj.unnormalize_bb(t_bb, sample_set=None)
             # g_bb = data_extract_1obj.transform(val_input[0][-4:], y_preds[0][:, 9])

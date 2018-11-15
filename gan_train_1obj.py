@@ -336,7 +336,7 @@ if __name__ == '__main__':
                 'beta_2': .999,     # default: .999
                 'decay': 0       # default: 0
                 }
-    model_name = 'quartic_sigma-2coeff-abs_red-sum_huber_t1.345xsig_seed-{}-TEST0f_VEHICLES-NOBIKE_7-fold_G3-64_{}-lr{}-b1{}-b2{}_bs{}_epochs{}'.format(
+    model_name = 'quartic_sigma-2coeff-abs_red-sum_huber_t1.345xsig_seed-{}-test0f_vehicles-nobike_7-fold_G3-64_{}-lr{}-b1{}-b2{}_bs{}_epochs{}'.format(
         seed, optimizer['name'], optimizer['lr'], optimizer['beta_1'], optimizer['beta_2'], batch_size, epochs
         )
     # model_name = 'maxGAN_SHOW-D-LEARN_1s-pred_G6-64_D3-32_w-adv{}_{}-lr{}-b1{}-b2{}_bs{}_kd{}_kg{}_epochs{}'.format(

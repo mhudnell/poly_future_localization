@@ -121,7 +121,7 @@ def get_model_poly(output_dir, poly_order, timepoints, tau, optimizer=None, weig
 
     if weights_path:
         print('Loading model')
-        M.load_weights(weights_path, by_name=True)
+        M.load_weights(weights_path)
 
     return M
 
@@ -236,7 +236,7 @@ def train_poly(x_train, x_val, y_train, y_val, train_info, val_info, model_compo
             print('val_des: {}'.format(val_des[epoch-1]), file=lossFile)
 
             # Checkpoint: Save model weights
-            weight_path = os.path.join(output_dir, 'weights', 'M_weights_epoch-{}.h5'.format(epoch))
+            weight_path = os.path.join(output_dir, 'weights', 'm_weights_epoch-{}.h5'.format(epoch))
             M.save_weights(weight_path)
 
     return [M_losses, val_losses, train_ious, val_ious, train_des, val_des]

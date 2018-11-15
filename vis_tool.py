@@ -1,4 +1,4 @@
-import cv2
+#import cv2
 import numpy as np
 import data_extract_1obj
 import os
@@ -199,6 +199,25 @@ def calc_metrics_mult(anchor, target_transforms, generated_transforms, sample_se
 
     return ious, des
 
+def calc_metrics_all(anchor, target_transforms, generated_transforms, sample_set=None):
+    """ Calculates displacement error and IoU metrics for 0.5 and 1.0 sec predictions"""
+
+    ious = np.empty(10)
+    des = np.empty(10)
+    for i in range(10):
+        t_bb = data_extract_1obj.transform(anchor, target_transforms[:, i, 0])
+        g_bb = data_extract_1obj.transform(anchor, generated_transforms[:, i, 0])
+        t_bb = data_extract_1obj.unnormalize_bb(t_bb, sample_set=sample_set)
+        g_bb = data_extract_1obj.unnormalize_bb(g_bb, sample_set=sample_set)
+
+        target = Rect.make_cXcYWH(t_bb[0], t_bb[1], t_bb[2], t_bb[3])
+        generated = Rect.make_cXcYWH(g_bb[0], g_bb[1], g_bb[2], g_bb[3])
+
+        ious[i] = Rect.get_IoU(target, generated)
+        des[i] = Rect.get_DE(target, generated)
+
+
+    return ious, des
 
 
 def calc_metrics_polynomial(anchor, target_transforms, coeffs, sample_set=None):

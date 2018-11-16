@@ -89,6 +89,71 @@ def drawFrameRects(sample_set, frame, objId, bb_orig, isGen, folder_dir, dataset
 
     return
 
+def draw_p_and_gt(set_info, prior_bbs, t_p, t_gt, output_dir, unnormalized=True, display=False):
+    '''
+    Draws past, proposed, and ground truth future frames.
+
+    Arguments:
+        set_info: [<sequence dir>, <anchor frame filename>, <final frame filename>, <object id>, <object class>]
+    '''
+    bbs = np.copy(prior_bbs)
+    # img_file = os.path.join(set_info[0], 'image_02', 'data', set_info[1] + '.png')
+    img_file = os.path.join(set_info[0], 'image_02', 'data', set_info[2] + '.png')
+    seq_name = os.path.basename(set_info[0])
+    print(img_file, seq_name)
+    img = cv2.imread(img_file)
+
+    print(prior_bbs[-1], t_p)
+    pred = data_extract_1obj.transform(prior_bbs[-1], t_p)
+    gt = data_extract_1obj.transform(prior_bbs[-1], t_gt)
+    pred = data_extract_1obj.unnormalize_bb(pred)
+    gt = data_extract_1obj.unnormalize_bb(gt)
+
+    # Unnormalize bbs
+    if unnormalized:
+        bbs[:, 0] = bbs[:, 0] * 1242
+        bbs[:, 1] = bbs[:, 1] * 375
+        bbs[:, 2] = bbs[:, 2] * 1242
+        bbs[:, 3] = bbs[:, 3] * 375
+
+    # Convert to [L, T, W, H]
+    for bb in bbs:
+        bb = data_extract_1obj.center_to_topleft_bb(bb)
+    pred = data_extract_1obj.center_to_topleft_bb(pred)
+    gt = data_extract_1obj.center_to_topleft_bb(gt)
+
+    # Convert to int
+    bbs = bbs.astype(int)
+    pred = pred.astype(int)
+    gt = gt.astype(int)
+
+    a = .2  # .4
+    color = (4, 165, 239)
+    for i, bb in enumerate(bbs):
+        # if i % 3 == 0:
+        overlay = img.copy()
+        # if i == 9:  # anchor
+        #     color = (102, 224, 225)
+        # else:
+        #     color = (255, 102, 153)
+        
+        cv2.rectangle(overlay, (bb[0], bb[1]), (bb[0] + bb[2], bb[1] + bb[3]), color, 2)
+        cv2.addWeighted(overlay, a, img, 1 - a, 0, img)
+        a += .08  # .2
+
+    img = cv2.rectangle(img, (pred[0], pred[1]), (pred[0] + pred[2], pred[1] + pred[3]), (255, 97, 0), 2)  
+    img = cv2.rectangle(img, (gt[0], gt[1]), (gt[0] + gt[2], gt[1] + gt[3]), (0, 255, 0), 2)
+
+    if display:
+        cv2.imshow('ImageWindow', img)
+        cv2.waitKey()
+    else:
+        # cv2.imwrite(folder_dir + sample_set + '_' + frame + '_' + objId + '_' + suffix + '.png', img)
+        print()
+        cv2.imwrite(os.path.join(output_dir, seq_name+'_'+set_info[2]+'_'+set_info[3]+'.png'), img)
+
+    return
+
 class Rect:
     def __init__(self, l, t, r, b):
         assert (l <= r), "l not greater than r"
@@ -250,19 +315,19 @@ if __name__ == '__main__':
 
     # samples, samples_info = data_extract_1obj.get_kitti_data(sets=None)
     # samples, samples_info = data_extract_1obj.get_kitti_raw_data()
-    samples, samples_info = data_extract_1obj.get_kitti_raw_tracklets()
+    xs, ys, samples_info = data_extract_1obj.get_kitti_raw_tracklets(np.linspace(0.1, 1.0, 10))
 
-    # print(samples.shape)
-    # print(len(samples_info))
+    print(xs.shape)
+    # print(len(ys))
 
-    x = samples[0]
+    x = xs[0]
     x_info = samples_info[0]
     print(x)
     print(x_info)
 
     # drawFrameRects(x_info[0], x_info[1], x_info[2], x, False, None, dataset='kitti_raw', display=True)
-    drawFrameRects(x_info[0], x_info[1], x_info[2], x, False, None, dataset='kitti_raw_tracklets', display=True)
-    drawFrameRects(x_info[0], x_info[1], x_info[2], x, True, None, dataset='kitti_raw_tracklets', display=True)
+    # drawFrameRects(x_info[0], x_info[1], x_info[2], x, False, None, dataset='kitti_raw_tracklets', display=True)
+    # drawFrameRects(x_info[0], x_info[1], x_info[2], x, True, None, dataset='kitti_raw_tracklets', display=True)
 
     # View multiple
     # for i in range(5):

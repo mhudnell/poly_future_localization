@@ -1,7 +1,7 @@
 #import gan_1obj
-import matplotlib
-# Force matplotlib to not use any Xwindows backend.
-matplotlib.use('Agg')
+# import matplotlib
+# # Force matplotlib to not use any Xwindows backend.
+# matplotlib.use('Agg')
 import poly_model
 import data_extract_1obj
 import numpy as np
@@ -9,6 +9,7 @@ import os
 
 import matplotlib.pyplot as plt
 from vis_tool import calc_metrics_all
+import vis_tool
 
 def run_tests(generator_model, discriminator_model, combined_model, model_name, seed=6, dataset='kitti_tracking'):
 
@@ -29,10 +30,10 @@ def run_tests(generator_model, discriminator_model, combined_model, model_name, 
     gan_1obj.test_model_multiple(generator_model, discriminator_model, combined_model, model_name, test_data, test_data_info, dataset)
 
 def get_metrics(output_dir, M, x, y, set_info):
-    x = x.reshape((-1, 40))
+    x_in = x.reshape((-1, 40))
     y = y.reshape((-1, 4, 10, 1))
     num_samples = x.shape[0]
-    out = M.predict(x)
+    out = M.predict(x_in)
     gen_transforms = out[0]
     print("len(out):", len(out))
     print(out[0].shape)
@@ -41,27 +42,66 @@ def get_metrics(output_dir, M, x, y, set_info):
     ious = np.empty((num_samples, 10))
     des = np.empty((num_samples, 10))
     for i in range(x.shape[0]):
-        ious[i], des[i] = calc_metrics_all(x[i][-4:], y[i], gen_transforms[i])
+        ious[i], des[i] = calc_metrics_all(x_in[i][-4:], y[i], gen_transforms[i])
 
     print("ADE:", np.mean(des))
     print("FDE:", np.mean(des[:, 9]))
     print("FIOU:", np.mean(ious[:, 9]))  
 
     #print(np.linspace(0.1,1.0,10).shape, np.mean(ious, axis=0).shape)
-    #fig1, ax1 = plt.subplots()    
-    #ax1.plot(np.linspace(0.1, 1.0, 10), np.mean(ious, axis=0))
-    #ax1.set_ylabel('mean IoU')
-    #ax1.set_xlabel('future timestep (seconds)')
-    #ax1.set_title('mean IoU over time')
-    #fig1.savefig(os.path.join(output_dir, 'mean_ious.png'))
+    # fig1, ax1 = plt.subplots()    
+    # ax1.plot(np.linspace(0.1, 1.0, 10), np.mean(ious, axis=0))
+    # ax1.set_ylabel('mean IoU')
+    # ax1.set_xlabel('future timestep (seconds)')
+    # ax1.set_title('mean IoU over time')
+    # fig1.savefig(os.path.join(output_dir, 'mean_ious.png'))
 
-    timestep_hist(output_dir, ious[:, 9])
+    #timestep_hist(output_dir, ious[:, 9])
     #sigma_iou_scatter(output_dir, gen_transforms[:, :, 9, 1], ious[:, 9])
-    #tx_ty_scatter(output_dir, gen_transforms)
-    #transf_hist(output_dir, gen_transforms[:, 3, 9, 0], y[:, 3, 9, 0])
+    # tx_ty_scatter(output_dir, gen_transforms)
+    # show_failures(output_dir, ious[:, 9], gen_transforms[:, :, :, 1], gen_transforms[:, :, :, 0], x, y, set_info)
+    # show_success(output_dir, ious[:, 9], gen_transforms[:, :, :, 1], gen_transforms[:, :, :, 0], x, y, set_info)
+    #transf_hist(output_dir, gen_transforms[:, 0, 9, 0], y[:, 0, 9, 0])
 
-def show_failures(output_dir, sigmas, transforms, set_info):
-    ...
+def show_failures(output_dir, ious, sigmas, transforms, x, y, set_info):
+    output_dir = os.path.join(output_dir, 'failure_cases')
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    ids = data_extract_1obj.get_batch_ids(x.shape[0], x.shape[0])
+    count = 0
+    resultsFile = open(os.path.join(output_dir, 'results.txt'), 'w')
+    for i in ids:
+        if count == 20:
+            break
+        if ious[i] < 0.03:
+            vis_tool.draw_p_and_gt(set_info[i], x[i], transforms[i, :, 9], y[i, :, 9], output_dir)
+
+            print("seq:", os.path.basename(set_info[i][0]), file=resultsFile)
+            print("target frame / obj:", set_info[i][2], "/", set_info[i][3], file=resultsFile)
+            print("  mean sigma:", np.mean(sigmas[i, :, 9]), file=resultsFile)
+            print("  sigmas:", sigmas[i, :, 9], "\n", file=resultsFile)
+            count +=1
+
+def show_success(output_dir, ious, sigmas, transforms, x, y, set_info):
+    output_dir = os.path.join(output_dir, 'success_cases')
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    ids = data_extract_1obj.get_batch_ids(x.shape[0], x.shape[0])
+    count = 0
+    resultsFile = open(os.path.join(output_dir, 'results.txt'), 'w')
+    for i in ids:
+        if count == 20:
+            break
+        if ious[i] > 0.9:
+            vis_tool.draw_p_and_gt(set_info[i], x[i], transforms[i, :, 9], y[i, :, 9], output_dir)
+
+            print("seq:", os.path.basename(set_info[i][0]), file=resultsFile)
+            print("target frame / obj:", set_info[i][2], "/", set_info[i][3], file=resultsFile)
+            print("  mean sigma:", np.mean(sigmas[i, :, 9]), file=resultsFile)
+            print("  sigmas:", sigmas[i, :, 9], "\n", file=resultsFile)
+            count +=1
 
 def tx_ty_scatter(output_dir, transforms):
     fig3, ax3 = plt.subplots()
@@ -83,10 +123,10 @@ def transf_hist(output_dir, pred_ts, gt_ts):
     fig2, ax2 = plt.subplots()
     ax2.hist([pred_ts, gt_ts], bins=30, label=['predicted', 'ground truth'])
     ax2.legend()
-    ax2.set_xlabel('+1.0s th')
+    ax2.set_xlabel('+1.0s tx')
     ax2.set_ylabel('count')
-    ax2.set_title('+1.0s th distribution')
-    fig2.savefig(os.path.join(output_dir, 'th_hist.png'))
+    ax2.set_title('+1.0s tx distribution')
+    fig2.savefig(os.path.join(output_dir, 'tx_hist.png'))
 
 def sigma_iou_scatter(output_dir, sigmas, ious):
     """sigma v iou scatter plot for 1 timestep"""
@@ -185,8 +225,8 @@ if __name__ == '__main__':
     #model_name = 'quartic_sigma-2coeff-abs_red-sum_huber_t1.345xsig_seed-11-test0_vehicles-nobike_7-fold_g3-64_adam-lr0.00146-b10.9-b20.999_bs512_epochs600'
     #model_name = 'quartic-test_t1.345xsig_seed-11-test0f_vehicles-nobike_7-fold_G3-64_adam-lr0.00146-b10.9-b20.999_bs512_epochs600'
     #model_name = 'sextic-test_t1.345xsig_seed-11-test0f_vehicles-nobike_7-fold_G3-64_adam-lr0.00146-b10.9-b20.999_bs512_epochs600'
-    model_name = 'quintic-test_t1.345xsig_seed-11-test0f_vehicles-nobike_7-fold_G3-64_adam-lr0.00146-b10.9-b20.999_bs512_epochs600'
-    epoch = '300'
+    model_name = 'd5_past5-test_t1.345xsig_seed-11-test0_vehicles-nobike_7-fold_G3-64_adam-lr0.00146-b10.9-b20.999_bs512_epochs600'
+    epoch = '511'
 #    generator_model_path = 'C:\\Users\\Max\\Research\\maxGAN\\models\\' + model_name + '\\weights\\gen_weights_epoch-' + epoch + '.h5'
 #    discriminator_model_path = 'C:\\Users\\Max\\Research\\maxGAN\\models\\' + model_name + '\\weights\\discrim_weights_epoch-' + epoch + '.h5'
     optimizer = {
@@ -207,17 +247,16 @@ if __name__ == '__main__':
     test_sets = np.random.choice(all_sets, (3,10), replace=False)
     x_test, y_test, set_info = data_extract_1obj.get_kitti_raw_tracklets(np.linspace(0.1, 1.0, 10), sets=test_sets[0], class_types=['Car', 'Van', 'Truck'], past_frames=past_frames)
     
-    multimodel_timestep_hist(x_test, y_test, past_frames, optimizer=optimizer)
-'''
-    output_dir = os.path.join('/playpen/mhudnell_cvpr_2019/mhudnell/maxgan/models', model_name)
-    weights_path = os.path.join('/playpen/mhudnell_cvpr_2019/mhudnell/maxgan/models', model_name, 'weights/m_weights_epoch-{}.h5'.format(epoch))
-    #print(weights_path)
+    # multimodel_timestep_hist(x_test, y_test, past_frames, optimizer=optimizer)
+
+    # output_dir = os.path.join('/playpen/mhudnell_cvpr_2019/mhudnell/maxgan/models', model_name)
+    output_dir = os.path.join('C:\\Users\\Max\\Research\\maxGAN\\models', model_name)
+    weights_path = os.path.join(output_dir, 'weights', 'm_weights_epoch-{}.h5'.format(epoch))
     poly_order = 5
     tau = 1.345
-    M = poly_model.get_model_poly(None, poly_order, np.linspace(0.1, 1.0, 10), tau, past_frames, optimizer=optimizer,
-	 weights_path=weights_path)
+    M = poly_model.get_model_poly(None, poly_order, np.linspace(0.1, 1.0, 10), tau, past_frames, optimizer=optimizer)
     get_metrics(output_dir, M, x_test, y_test, set_info) 
-'''
+
 
     # Deprecated
     # step = '13700'

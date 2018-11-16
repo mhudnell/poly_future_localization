@@ -6,6 +6,7 @@ import poly_model
 import data_extract_1obj
 import numpy as np
 import os
+import scipy
 
 import matplotlib.pyplot as plt
 from vis_tool import calc_metrics_all
@@ -29,8 +30,8 @@ def run_tests(generator_model, discriminator_model, combined_model, model_name, 
 
     gan_1obj.test_model_multiple(generator_model, discriminator_model, combined_model, model_name, test_data, test_data_info, dataset)
 
-def get_metrics(output_dir, M, x, y, set_info):
-    x_in = x.reshape((-1, 40))
+def get_metrics(output_dir, M, x, y, set_info, past_frames):
+    x_in = x.reshape((-1, past_frames*4))
     y = y.reshape((-1, 4, 10, 1))
     num_samples = x.shape[0]
     out = M.predict(x_in)
@@ -59,8 +60,8 @@ def get_metrics(output_dir, M, x, y, set_info):
     #timestep_hist(output_dir, ious[:, 9])
     #sigma_iou_scatter(output_dir, gen_transforms[:, :, 9, 1], ious[:, 9])
     # tx_ty_scatter(output_dir, gen_transforms)
-    # show_failures(output_dir, ious[:, 9], gen_transforms[:, :, :, 1], gen_transforms[:, :, :, 0], x, y, set_info)
-    # show_success(output_dir, ious[:, 9], gen_transforms[:, :, :, 1], gen_transforms[:, :, :, 0], x, y, set_info)
+    show_failures(output_dir, ious[:, 9], gen_transforms[:, :, :, 1], gen_transforms[:, :, :, 0], x, y, set_info)
+    show_success(output_dir, ious[:, 9], gen_transforms[:, :, :, 1], gen_transforms[:, :, :, 0], x, y, set_info)
     #transf_hist(output_dir, gen_transforms[:, 0, 9, 0], y[:, 0, 9, 0])
 
 def show_failures(output_dir, ious, sigmas, transforms, x, y, set_info):
@@ -75,7 +76,8 @@ def show_failures(output_dir, ious, sigmas, transforms, x, y, set_info):
         if count == 20:
             break
         if ious[i] < 0.03:
-            vis_tool.draw_p_and_gt(set_info[i], x[i], transforms[i, :, 9], y[i, :, 9], output_dir)
+            heatmap_overlay = create_heatmap(sigmas[i,:,9], transforms[i,:,9], x[i][-1])
+            vis_tool.draw_p_and_gt(set_info[i], x[i], transforms[i, :, 9], y[i, :, 9], output_dir, heatmap=heatmap_overlay)
 
             print("seq:", os.path.basename(set_info[i][0]), file=resultsFile)
             print("target frame / obj:", set_info[i][2], "/", set_info[i][3], file=resultsFile)
@@ -95,13 +97,47 @@ def show_success(output_dir, ious, sigmas, transforms, x, y, set_info):
         if count == 20:
             break
         if ious[i] > 0.9:
-            vis_tool.draw_p_and_gt(set_info[i], x[i], transforms[i, :, 9], y[i, :, 9], output_dir)
+            heatmap_overlay = create_heatmap(sigmas[i,:,9], transforms[i,:,9], x[i][-1])
+            vis_tool.draw_p_and_gt(set_info[i], x[i], transforms[i, :, 9], y[i, :, 9], output_dir, heatmap=heatmap_overlay)
 
             print("seq:", os.path.basename(set_info[i][0]), file=resultsFile)
             print("target frame / obj:", set_info[i][2], "/", set_info[i][3], file=resultsFile)
             print("  mean sigma:", np.mean(sigmas[i, :, 9]), file=resultsFile)
             print("  sigmas:", sigmas[i, :, 9], "\n", file=resultsFile)
             count +=1
+
+def create_heatmap(sigma, true_t, anchor):
+    ts = np.empty((1000, 4))
+    for i in range(4):
+        ts[:, i] = sample_transfs(true_t[i], sigma[i], 1000)
+    heatmap_overlay = vis_tool.draw_heatmap(anchor, ts)
+    return heatmap_overlay
+
+def sample_transfs(mean, sigma, num_samples):
+    xs = np.linspace(-5*sigma, 5*sigma, 1000)
+    pdf = np.array([get_p(x, sigma) for x in xs])
+    cdf = np.cumsum(pdf)
+    cdf = cdf / np.max(cdf)
+    icdf = np.percentile(cdf, range(0,101))
+
+    samples = np.random.uniform(size=num_samples) * 101
+    x_s = icdf[samples.astype(int)]
+    return x_s + mean
+
+
+def get_p(d_x, sigma):
+    tau = 1.345*sigma
+    c = sigma*np.sqrt(2*np.pi)*scipy.special.erf(tau/(sigma*np.sqrt(2))) + (2*np.square(sigma)/tau)*np.exp(-np.square(tau)/(2*np.square(sigma)))
+    p = (1/c)*np.exp(np.where(np.abs(d_x) < tau, gauss(d_x, sigma), laplace(d_x, sigma, tau)))
+    return p
+
+def gauss(d_x, sigma):
+    return -np.square(d_x)/(2*np.square(sigma))
+
+def laplace(d_x, sigma, tau):
+    return (-tau/(sigma*np.sqrt(2)))*np.abs(d_x) + np.square(tau)/(2*np.square(sigma))
+
+
 
 def tx_ty_scatter(output_dir, transforms):
     fig3, ax3 = plt.subplots()
@@ -222,10 +258,10 @@ if __name__ == '__main__':
             data_cols.append(char + str(fNum))
 
     # LOAD MODEL
-    #model_name = 'quartic_sigma-2coeff-abs_red-sum_huber_t1.345xsig_seed-11-test0_vehicles-nobike_7-fold_g3-64_adam-lr0.00146-b10.9-b20.999_bs512_epochs600'
+    model_name = 'quartic_sigma-2coeff-abs_red-sum_huber_t1.345xsig_seed-11-test0_vehicles-nobike_7-fold_g3-64_adam-lr0.00146-b10.9-b20.999_bs512_epochs600'
     #model_name = 'quartic-test_t1.345xsig_seed-11-test0f_vehicles-nobike_7-fold_G3-64_adam-lr0.00146-b10.9-b20.999_bs512_epochs600'
     #model_name = 'sextic-test_t1.345xsig_seed-11-test0f_vehicles-nobike_7-fold_G3-64_adam-lr0.00146-b10.9-b20.999_bs512_epochs600'
-    model_name = 'd5_past5-test_t1.345xsig_seed-11-test0_vehicles-nobike_7-fold_G3-64_adam-lr0.00146-b10.9-b20.999_bs512_epochs600'
+    # model_name = 'd5_past5-test_t1.345xsig_seed-11-test0_vehicles-nobike_7-fold_G3-64_adam-lr0.00146-b10.9-b20.999_bs512_epochs600'
     epoch = '511'
 #    generator_model_path = 'C:\\Users\\Max\\Research\\maxGAN\\models\\' + model_name + '\\weights\\gen_weights_epoch-' + epoch + '.h5'
 #    discriminator_model_path = 'C:\\Users\\Max\\Research\\maxGAN\\models\\' + model_name + '\\weights\\discrim_weights_epoch-' + epoch + '.h5'
@@ -252,10 +288,11 @@ if __name__ == '__main__':
     # output_dir = os.path.join('/playpen/mhudnell_cvpr_2019/mhudnell/maxgan/models', model_name)
     output_dir = os.path.join('C:\\Users\\Max\\Research\\maxGAN\\models', model_name)
     weights_path = os.path.join(output_dir, 'weights', 'm_weights_epoch-{}.h5'.format(epoch))
-    poly_order = 5
+    poly_order = 4
     tau = 1.345
-    M = poly_model.get_model_poly(None, poly_order, np.linspace(0.1, 1.0, 10), tau, past_frames, optimizer=optimizer)
-    get_metrics(output_dir, M, x_test, y_test, set_info) 
+    M = poly_model.get_model_poly(None, poly_order, np.linspace(0.1, 1.0, 10), tau, past_frames, optimizer=optimizer,
+    weights_path=weights_path)
+    get_metrics(output_dir, M, x_test, y_test, set_info, past_frames) 
 
 
     # Deprecated

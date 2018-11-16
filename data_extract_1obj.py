@@ -177,6 +177,7 @@ def get_kitti_raw_tracklets(timepoints, sets=None, normalize=True, use_occluded=
     print('num_required_frames:', num_required_frames)
 
     root = "/data/b/mhudnell_cvpr_2019/2011_09_26_tracklets_only"
+    #root = 'F:\\Car data\\kitti\\data_raw_with_tracklets\\2011_09_26'
     for i, seq in enumerate(os.listdir(root)):
         # print(i, seq)
         seq_dir = os.path.join(root, seq)
@@ -229,6 +230,7 @@ def get_kitti_raw_tracklets(timepoints, sets=None, normalize=True, use_occluded=
                         y_sample = np.empty((4, len(future_frames)))
                         for i, j in enumerate(future_frames):
                             t = get_transformation(object_queue[9], object_queue[9+j])
+                            # t = get_offset_t(object_queue[9], object_queue[9+j])
                             y_sample[:, i] = t
 
                         x.append(x_sample)
@@ -384,6 +386,14 @@ def unnormalize_sample(sample, sample_set, top_left=False):
         denormalized[i] = center_to_topleft_bb(unnormal)
     return denormalized
 
+def get_offset_t(anchor, target):
+    """Calculate the transformation (t), which goes from the anchor box, to the target box."""
+    t = np.empty(4)
+    t[0] = target[0] - anchor[0]
+    t[1] = target[1] - anchor[1]
+    t[2] = target[2] - anchor[2]
+    t[3] = target[3] - anchor[3]
+    return t
 
 def get_transformation(anchor, target):
     """Calculate the transformation (t), which goes from the anchor box, to the target box."""
@@ -403,8 +413,19 @@ def transform(anchor, t):
         proposal[2] = anchor[2]*exp(t[2])
         proposal[3] = anchor[3]*exp(t[3])
     except OverflowError as err:
-        print('Overflowed after ', t, err)
+        print('Overflowed:', err)
+        print('anchor', anchor)
+        print('t', t)
         proposal = np.zeros(4)
+    return proposal
+
+def transform_offset(anchor, t):
+    """Apply transformation t to anchor box to get a proposal box."""
+    proposal = np.empty(4)
+    proposal[0] = anchor[0] + t[0]
+    proposal[1] = anchor[1] + t[1]
+    proposal[2] = anchor[2] + t[2]
+    proposal[3] = anchor[3] + t[3]
     return proposal
 
 def center_to_topleft_bb(bb):

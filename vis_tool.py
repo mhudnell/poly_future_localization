@@ -1,4 +1,4 @@
-#import cv2
+import cv2
 import numpy as np
 import data_extract_1obj
 import os
@@ -89,7 +89,7 @@ def drawFrameRects(sample_set, frame, objId, bb_orig, isGen, folder_dir, dataset
 
     return
 
-def draw_p_and_gt(set_info, prior_bbs, t_p, t_gt, output_dir, unnormalized=True, display=False):
+def draw_p_and_gt(set_info, prior_bbs, t_p, t_gt, output_dir, unnormalized=True, display=False, heatmap=None):
     '''
     Draws past, proposed, and ground truth future frames.
 
@@ -117,8 +117,8 @@ def draw_p_and_gt(set_info, prior_bbs, t_p, t_gt, output_dir, unnormalized=True,
         bbs[:, 3] = bbs[:, 3] * 375
 
     # Convert to [L, T, W, H]
-    for bb in bbs:
-        bb = data_extract_1obj.center_to_topleft_bb(bb)
+    for i in range(len(bbs)):
+        bbs[i] = data_extract_1obj.center_to_topleft_bb(bbs[i])
     pred = data_extract_1obj.center_to_topleft_bb(pred)
     gt = data_extract_1obj.center_to_topleft_bb(gt)
 
@@ -144,6 +144,11 @@ def draw_p_and_gt(set_info, prior_bbs, t_p, t_gt, output_dir, unnormalized=True,
     img = cv2.rectangle(img, (pred[0], pred[1]), (pred[0] + pred[2], pred[1] + pred[3]), (255, 97, 0), 2)  
     img = cv2.rectangle(img, (gt[0], gt[1]), (gt[0] + gt[2], gt[1] + gt[3]), (0, 255, 0), 2)
 
+    if heatmap is not None:
+        print("HEATMAP", heatmap.shape)
+        print("IMG", img.shape)
+        cv2.addWeighted(heatmap, 0.6, img, 0.4, 0, img)
+
     if display:
         cv2.imshow('ImageWindow', img)
         cv2.waitKey()
@@ -153,6 +158,31 @@ def draw_p_and_gt(set_info, prior_bbs, t_p, t_gt, output_dir, unnormalized=True,
         cv2.imwrite(os.path.join(output_dir, seq_name+'_'+set_info[2]+'_'+set_info[3]+'.png'), img)
 
     return
+
+def draw_heatmap(anchor, transforms):
+    '''
+    transforms = [1000 x 4]
+    '''
+    print("ANCHOR", anchor.shape)
+    heatmap_overlay = np.zeros((375, 1242, 1), dtype=np.uint16)
+    for t in transforms:
+        box = data_extract_1obj.transform(anchor, t)
+        box = data_extract_1obj.unnormalize_bb(box)
+        topleft_box = data_extract_1obj.center_to_topleft_bb(box)
+        topleft_box = topleft_box.astype(int)
+        if topleft_box[0] > 1242 or topleft_box[0] < 0 or topleft_box[1] > 375 or topleft_box[0] < 0:
+            print("BOX:", box)
+
+        # heatmap_overlay[box[0]:box[0]+box[2], box[1]:box[1]+box[2], 0] = 1
+        heatmap_overlay[topleft_box[1]:topleft_box[1]+topleft_box[3], topleft_box[0]:topleft_box[0]+topleft_box[2], 0] += 1
+    # heatmap_overlay.clip(0, 255)
+    heatmap_overlay = cv2.convertScaleAbs(heatmap_overlay)
+    print("HEATMAP1D", heatmap_overlay.shape, np.max(heatmap_overlay), np.sum(heatmap_overlay))
+    heatmap_overlay = cv2.cvtColor(heatmap_overlay, cv2.COLOR_GRAY2RGB)
+    print("HEATMAP", heatmap_overlay.shape, np.max(heatmap_overlay), np.sum(heatmap_overlay))
+    cv2.applyColorMap(heatmap_overlay, cv2.COLORMAP_JET)
+
+    return heatmap_overlay
 
 class Rect:
     def __init__(self, l, t, r, b):
@@ -253,6 +283,8 @@ def calc_metrics_mult(anchor, target_transforms, generated_transforms, sample_se
     for i, j in enumerate([4, 9]):
         t_bb = data_extract_1obj.transform(anchor, target_transforms[:, j, 0])
         g_bb = data_extract_1obj.transform(anchor, generated_transforms[:, j, 0])
+        # t_bb = data_extract_1obj.transform_offset(anchor, target_transforms[:, j, 0])
+        # g_bb = data_extract_1obj.transform_offset(anchor, generated_transforms[:, j, 0])
         t_bb = data_extract_1obj.unnormalize_bb(t_bb, sample_set=sample_set)
         g_bb = data_extract_1obj.unnormalize_bb(g_bb, sample_set=sample_set)
 
@@ -265,7 +297,7 @@ def calc_metrics_mult(anchor, target_transforms, generated_transforms, sample_se
     return ious, des
 
 def calc_metrics_all(anchor, target_transforms, generated_transforms, sample_set=None):
-    """ Calculates displacement error and IoU metrics for 0.5 and 1.0 sec predictions"""
+    """ Calculates displacement error and IoU metrics for 0.1-1.0 sec predictions"""
 
     ious = np.empty(10)
     des = np.empty(10)

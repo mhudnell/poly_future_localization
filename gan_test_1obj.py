@@ -106,22 +106,38 @@ def show_success(output_dir, ious, sigmas, transforms, x, y, set_info):
             print("  sigmas:", sigmas[i, :, 9], "\n", file=resultsFile)
             count +=1
 
-def create_heatmap(sigma, true_t, anchor):
+def create_heatmap(sigma, mean_t, anchor):
     ts = np.empty((1000, 4))
     for i in range(4):
-        ts[:, i] = sample_transfs(true_t[i], sigma[i], 1000)
+        ts[:, i] = sample_transfs(mean_t[i], sigma[i], 1000)
     heatmap_overlay = vis_tool.draw_heatmap(anchor, ts)
     return heatmap_overlay
 
 def sample_transfs(mean, sigma, num_samples):
     xs = np.linspace(-5*sigma, 5*sigma, 1000)
-    pdf = np.array([get_p(x, sigma) for x in xs])
-    cdf = np.cumsum(pdf)
-    cdf = cdf / np.max(cdf)
-    icdf = np.percentile(cdf, range(0,101))
+    
 
+    pdf = np.array([get_p(x, sigma) for x in xs])
+    pdf /= np.sum(pdf)
+    cdf = np.cumsum(pdf) #/ np.sum(pdf)
+    # plt.hist(cdf, bins=100, histtype='step', cumulative=1)
+    plt.plot(xs, pdf)
+    plt.plot(xs, cdf)
+    plt.title('cdf')
+    plt.show()
+
+    icdf = np.percentile(cdf, range(0, 101))
+    # icdf = (np.percentile(cdf, range(0, 101)) - 0.5) * 5*sigma
+    plt.plot(np.linspace(0.0, 1.0, 101), icdf)
+    plt.title('icdf')
+    plt.show()
+    
     samples = np.random.uniform(size=num_samples) * 101
     x_s = icdf[samples.astype(int)]
+    # print(x_s.shape)
+    # plt.scatter(x_s, np.zeros_like(x_s))
+    # plt.title('x_s')
+    # plt.show()
     return x_s + mean
 
 

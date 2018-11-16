@@ -54,6 +54,6 @@ if __name__ == '__main__':
         )
 
     M = get_model_poly(None, POLY_ORDER, timesteps,
-        TAU, PAST_FRAMES, optimizer=optimizer, weights_path=weights_path)
+         TAU, PAST_FRAMES, optimizer=optimizer, weights_path=weights_path)
 
     save_to_npz(M, x_test, y_test)

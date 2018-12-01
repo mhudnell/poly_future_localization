@@ -93,7 +93,7 @@ def drawFrameRects(sample_set, frame, objId, bb_orig, isGen, folder_dir, dataset
 
     return
 
-def draw_p_and_gt(set_info, prior_bbs, t_p, t_gt, output_dir, unnormalized=True, display=False, heatmap=None):
+def draw_p_and_gt(set_info, prior_bbs, t_p, t_gt, output_dir, unnormalized=True, display=False, heatmap=None, sigma=None, draw_past=False):
     '''
     Draws past, proposed, and ground truth future frames.
 
@@ -105,11 +105,13 @@ def draw_p_and_gt(set_info, prior_bbs, t_p, t_gt, output_dir, unnormalized=True,
     seq_name = os.path.basename(set_info[0])
     print(img_file, seq_name)
     
-    img = cv2.imread(img_file)
+    # cv2
+    # img = cv2.imread(img_file)
 
-    # img = mpimg.imread(img_file)
-    # fig,ax = plt.subplots(1)
-    # ax.imshow(img)
+    # matplotlib
+    img = mpimg.imread(img_file)
+    fig,ax = plt.subplots(1)
+    ax.imshow(img)
 
     print(prior_bbs[-1], t_p)
     pred = data_extract_1obj.transform(prior_bbs[-1], t_p)
@@ -135,44 +137,69 @@ def draw_p_and_gt(set_info, prior_bbs, t_p, t_gt, output_dir, unnormalized=True,
     pred = pred.astype(int)
     gt = gt.astype(int)
     
-    a = .2  # .4
+    a = 1.0 - (.08 * len(bbs))# .2  # .4
     color = (4, 165, 239)
     for i, bb in enumerate(bbs):
-        overlay = img.copy()
-        
-        cv2.rectangle(overlay, (bb[0], bb[1]), (bb[0] + bb[2], bb[1] + bb[3]), color, 2)
-        cv2.addWeighted(overlay, a, img, 1 - a, 0, img)
+        # cv2
+        # overlay = img.copy()
+        # cv2.rectangle(overlay, (bb[0], bb[1]), (bb[0] + bb[2], bb[1] + bb[3]), color, 2)
+        # cv2.addWeighted(overlay, a, img, 1 - a, 0, img)
 
-        # rect = patches.Rectangle((bb[0], bb[1]), bb[2], bb[3], linewidth=2, edgecolor=(239/255, 165/255, 4/255), alpha=a, fill=False)
-        # ax.add_patch(rect)
+        # matplotlib
+        if draw_past:
+            rect = patches.Rectangle((bb[0], bb[1]), bb[2], bb[3], linewidth=2, edgecolor=(239/255, 165/255, 4/255), alpha=a, fill=False)
+            ax.add_patch(rect)
 
         a += .08  # .2
 
-    img = cv2.rectangle(img, (pred[0], pred[1]), (pred[0] + pred[2], pred[1] + pred[3]), (255, 97, 0), 2)  
-    img = cv2.rectangle(img, (gt[0], gt[1]), (gt[0] + gt[2], gt[1] + gt[3]), (0, 255, 0), 2)
-    # gen_rect = patches.Rectangle((pred[0], pred[1]), pred[2], pred[3], linewidth=2, edgecolor='b', fill=False)
-    # ax.add_patch(gen_rect)
-    # true_rect = patches.Rectangle((gt[0], gt[1]), gt[2], gt[3], linewidth=2, edgecolor='g', fill=False)
-    # ax.add_patch(true_rect)
+    # cv2
+    # img = cv2.rectangle(img, (pred[0], pred[1]), (pred[0] + pred[2], pred[1] + pred[3]), (255, 97, 0), 2)  
+    # img = cv2.rectangle(img, (gt[0], gt[1]), (gt[0] + gt[2], gt[1] + gt[3]), (0, 255, 0), 2)
+
+    # matplotlib
+    true_rect = patches.Rectangle((gt[0], gt[1]), gt[2], gt[3], linewidth=2, edgecolor='w', fill=False)
+    ax.add_patch(true_rect)
+    gen_rect = patches.Rectangle((pred[0], pred[1]), pred[2], pred[3], linestyle='--', linewidth=2, edgecolor='r', fill=False)  #(0/255, 72/255, 255/255)
+    ax.add_patch(gen_rect)
 
     if heatmap is not None:
         # print("HEATMAP", heatmap.shape)
         # print("IMG", img.shape)
-        heatmap = cv2.convertScaleAbs(heatmap)
-        heatmap = cv2.cvtColor(heatmap, cv2.COLOR_GRAY2RGB)
-        cv2.applyColorMap(heatmap, cv2.COLORMAP_JET)
-        cv2.addWeighted(heatmap, 0.6, img, 0.4, 0, img)
 
+        # cv2
+        # heatmap = cv2.convertScaleAbs(heatmap)
+        # heatmap = cv2.cvtColor(heatmap, cv2.COLOR_GRAY2RGB)
+        # cv2.applyColorMap(heatmap, cv2.COLORMAP_JET)
+        # cv2.addWeighted(heatmap, 0.6, img, 0.4, 0, img)
+
+        # matplotlib
+        viridis = cm.get_cmap('viridis', 256)
         # gist_heat = cm.get_cmap('gist_heat', 256)
-        # ax.imshow(heatmap, cmap=gist_heat, alpha=0.6)
+
+        # heatmap = np.where(heatmap != 0, np.log2(heatmap), 0)
+        # ax.imshow(heatmap, cmap=viridis, alpha=0.75)
         # plt.show()
+
+        heatmap = np.sqrt(heatmap)
+        ax.imshow(heatmap, cmap=viridis, alpha=0.75)
+        plt.axis('off')
+        # ax.set_title("sigma_x: {:0.3f}, sigma_y: {:0.3f}, sigma_w: {:0.3f}, sigma_h: {:0.3f}".format(sigma[0], sigma[1], sigma[2], sigma[3]), fontsize=8)
+        plt.tight_layout()
+        # plt.show()
+
+
     if display:
         cv2.imshow('ImageWindow', img)
         cv2.waitKey()
-    # else:
-        # cv2.imwrite(folder_dir + sample_set + '_' + frame + '_' + objId + '_' + suffix + '.png', img)
+    else:
+        # cv2
         # cv2.imwrite(os.path.join(output_dir, seq_name+'_'+set_info[2]+'_'+set_info[3]+'.png'), img)
 
+        # matplotlib
+        output_file = os.path.join(output_dir, seq_name+'_'+set_info[2]+'_'+set_info[3])
+        plt.savefig(output_file + '.png', format='png')
+        # plt.savefig(output_file + '.eps', format='eps', dpi=1000)
+        # plt.savefig(output_file + '.pdf', format='pdf', dpi=1000)
     return
 
 def draw_heatmap(anchor, transforms):
@@ -180,8 +207,8 @@ def draw_heatmap(anchor, transforms):
     transforms = [1000 x 4]
     '''
     print("ANCHOR", anchor.shape)
-    heatmap_overlay = np.zeros((375, 1242, 1), dtype=np.uint16)
-    # heatmap_overlay = np.zeros((375, 1242), dtype=np.uint16)
+    # heatmap_overlay = np.zeros((375, 1242, 1), dtype=np.uint16)
+    heatmap_overlay = np.zeros((375, 1242), dtype=np.uint16)
     for t in transforms:
         box = data_extract_1obj.transform(anchor, t)
         box = data_extract_1obj.unnormalize_bb(box)
@@ -190,9 +217,13 @@ def draw_heatmap(anchor, transforms):
         if topleft_box[0] > 1242 or topleft_box[0] < 0 or topleft_box[1] > 375 or topleft_box[0] < 0:
             print("BOX:", box)
 
-        # heatmap_overlay[box[0]:box[0]+box[2], box[1]:box[1]+box[2], 0] = 1
-        heatmap_overlay[topleft_box[1]:topleft_box[1]+topleft_box[3], topleft_box[0]:topleft_box[0]+topleft_box[2], 0] += 1
-        # heatmap_overlay[topleft_box[1]:topleft_box[1]+topleft_box[3], topleft_box[0]:topleft_box[0]+topleft_box[2]] += 1
+        # heatmap_overlay[topleft_box[1]:topleft_box[1]+topleft_box[3], topleft_box[0]:topleft_box[0]+topleft_box[2], 0] += 1   # cv2
+        l = np.clip(topleft_box[1], 0, 375)
+        t = np.clip(topleft_box[0], 0, 1242)
+        r = np.clip(topleft_box[1]+topleft_box[3], 0, 375)
+        b = np.clip(topleft_box[0]+topleft_box[2], 0, 1242)
+        heatmap_overlay[l:r, t:b] += 1        # matplotlib
+
     # heatmap_overlay.clip(0, 255)
     # viridis = cm.get_cmap('viridis', 256)
     # quadmesh = plt.pcolormesh(heatmap_overlay, cmap=viridis, rasterized=True, vmin=-4, vmax=4)

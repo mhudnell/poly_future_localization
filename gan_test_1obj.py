@@ -61,23 +61,29 @@ def get_metrics(output_dir, M, x, y, set_info, past_frames):
     #sigma_iou_scatter(output_dir, gen_transforms[:, :, 9, 1], ious[:, 9])
     # tx_ty_scatter(output_dir, gen_transforms)
     show_failures(output_dir, ious[:, 9], gen_transforms[:, :, :, 1], gen_transforms[:, :, :, 0], x, y, set_info)
-    show_success(output_dir, ious[:, 9], gen_transforms[:, :, :, 1], gen_transforms[:, :, :, 0], x, y, set_info)
+    #show_success(output_dir, ious[:, 9], gen_transforms[:, :, :, 1], gen_transforms[:, :, :, 0], x, y, set_info)
     #transf_hist(output_dir, gen_transforms[:, 0, 9, 0], y[:, 0, 9, 0])
 
 def show_failures(output_dir, ious, sigmas, transforms, x, y, set_info):
-    output_dir = os.path.join(output_dir, 'failure_cases')
+    start = 2500
+    stop = 3300
+    # output_dir = os.path.join(output_dir, 'failure_cases_mplt', 'range{}-{}_.1-.5'.format(start, stop))
+    output_dir = os.path.join(output_dir, 'failure_cases_mplt')
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
     ids = data_extract_1obj.get_batch_ids(x.shape[0], x.shape[0])
     count = 0
     resultsFile = open(os.path.join(output_dir, 'results.txt'), 'w')
-    for i in ids:
+    # for i in ids[start:stop]:
+    for i in range(len(ids)):
         if count == 20:
             break
-        if ious[i] < 0.03:
+        # if ious[i] > 0.1 and ious[i] < 0.5 and set_info[i][2] == '0000000151' and set_info[i][3] == '16':
+        # if ious[i] < 0.1:
+        if set_info[i][2] == '0000000213' and set_info[i][3] == '55':
             heatmap_overlay = create_heatmap(sigmas[i,:,9], transforms[i,:,9], x[i][-1])
-            vis_tool.draw_p_and_gt(set_info[i], x[i], transforms[i, :, 9], y[i, :, 9], output_dir, heatmap=heatmap_overlay)
+            vis_tool.draw_p_and_gt(set_info[i], x[i], transforms[i, :, 9], y[i, :, 9], output_dir, heatmap=heatmap_overlay, sigma=sigmas[i,:,9], draw_past=True)
 
             print("seq:", os.path.basename(set_info[i][0]), file=resultsFile)
             print("target frame / obj:", set_info[i][2], "/", set_info[i][3], file=resultsFile)
@@ -86,19 +92,23 @@ def show_failures(output_dir, ious, sigmas, transforms, x, y, set_info):
             count +=1
 
 def show_success(output_dir, ious, sigmas, transforms, x, y, set_info):
-    output_dir = os.path.join(output_dir, 'success_cases')
+    start = 0
+    stop = 500
+    output_dir = os.path.join(output_dir, 'success_cases_mplt')
+    # output_dir = os.path.join(output_dir, 'success_cases_mplt', 'range{}-{}'.format(start, stop))
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
     ids = data_extract_1obj.get_batch_ids(x.shape[0], x.shape[0])
     count = 0
     resultsFile = open(os.path.join(output_dir, 'results.txt'), 'w')
-    for i in ids:
+    # for i in ids[start:stop]:
+    for i in range(len(ids)):
         if count == 20:
             break
         if ious[i] > 0.9:
             heatmap_overlay = create_heatmap(sigmas[i,:,9], transforms[i,:,9], x[i][-1])
-            vis_tool.draw_p_and_gt(set_info[i], x[i], transforms[i, :, 9], y[i, :, 9], output_dir, heatmap=heatmap_overlay)
+            vis_tool.draw_p_and_gt(set_info[i], x[i], transforms[i, :, 9], y[i, :, 9], output_dir, heatmap=heatmap_overlay, sigma=sigmas[i,:,9], draw_past=True)
 
             print("seq:", os.path.basename(set_info[i][0]), file=resultsFile)
             print("target frame / obj:", set_info[i][2], "/", set_info[i][3], file=resultsFile)
@@ -115,24 +125,29 @@ def create_heatmap(sigma, mean_t, anchor):
 
 def sample_transfs(mean, sigma, num_samples):
     xs = np.linspace(-5*sigma, 5*sigma, 1000)
-    
+
 
     pdf = np.array([get_p(x, sigma) for x in xs])
     pdf /= np.sum(pdf)
     cdf = np.cumsum(pdf) #/ np.sum(pdf)
     # plt.hist(cdf, bins=100, histtype='step', cumulative=1)
-    plt.plot(xs, pdf)
-    plt.plot(xs, cdf)
-    plt.title('cdf')
-    plt.show()
+    # plt.plot(xs, pdf)
+    # plt.plot(xs, cdf)
+    # plt.title('cdf')
+    # plt.show()
 
-    icdf = np.percentile(cdf, range(0, 101))
+
+    # icdf = np.percentile(cdf, range(0, 101))
     # icdf = (np.percentile(cdf, range(0, 101)) - 0.5) * 5*sigma
-    plt.plot(np.linspace(0.0, 1.0, 101), icdf)
-    plt.title('icdf')
-    plt.show()
-    
-    samples = np.random.uniform(size=num_samples) * 101
+    icdf = calc_icdf(xs, cdf)
+    # plt.plot(np.linspace(0.0, 1.0, 99), icdf)
+    # plt.title('icdf')
+    # plt.show()
+
+    samples = np.random.uniform(size=num_samples) * 99  #101?
+    # print(samples)
+    # print(samples.shape)
+    # print(icdf.shape)
     x_s = icdf[samples.astype(int)]
     # print(x_s.shape)
     # plt.scatter(x_s, np.zeros_like(x_s))
@@ -140,6 +155,19 @@ def sample_transfs(mean, sigma, num_samples):
     # plt.show()
     return x_s + mean
 
+def calc_icdf(x, cdf):
+    i = 0
+    step = 0.01
+    t = step
+    icdf = []
+    while t <= 1.:
+        if cdf[i] <= t and t <= cdf[i+1]:
+            icdf.append((x[i] * (cdf[i + 1] - t) + x[i+1] * (t - cdf[i])) / (cdf[i+1] - cdf[i]))
+            # icdf.append((x[i] * (t - cdf[i]) + x[i+1] * (cdf[i+1] - t)) / (cdf[i+1] - cdf[i]))
+            t += step
+        i += 1
+
+    return np.array(icdf)
 
 def get_p(d_x, sigma):
     tau = 1.345*sigma
@@ -274,11 +302,13 @@ if __name__ == '__main__':
             data_cols.append(char + str(fNum))
 
     # LOAD MODEL
-    model_name = 'quartic_sigma-2coeff-abs_red-sum_huber_t1.345xsig_seed-11-test0_vehicles-nobike_7-fold_g3-64_adam-lr0.00146-b10.9-b20.999_bs512_epochs600'
+    # model_name = 'quartic_sigma-2coeff-abs_red-sum_huber_t1.345xsig_seed-11-test0_vehicles-nobike_7-fold_g3-64_adam-lr0.00146-b10.9-b20.999_bs512_epochs600'
+    model_name = 'poly6_past10_t1.345xsig_seed11-0_vehicles-nobike_G3-64_adam-lr0.0005-b10.9-b20.999_bs128_epochs1100'
     #model_name = 'quartic-test_t1.345xsig_seed-11-test0f_vehicles-nobike_7-fold_G3-64_adam-lr0.00146-b10.9-b20.999_bs512_epochs600'
     #model_name = 'sextic-test_t1.345xsig_seed-11-test0f_vehicles-nobike_7-fold_G3-64_adam-lr0.00146-b10.9-b20.999_bs512_epochs600'
     # model_name = 'd5_past5-test_t1.345xsig_seed-11-test0_vehicles-nobike_7-fold_G3-64_adam-lr0.00146-b10.9-b20.999_bs512_epochs600'
-    epoch = '511'
+    # epoch = '511'
+    epoch = '1100'
 #    generator_model_path = 'C:\\Users\\Max\\Research\\maxGAN\\models\\' + model_name + '\\weights\\gen_weights_epoch-' + epoch + '.h5'
 #    discriminator_model_path = 'C:\\Users\\Max\\Research\\maxGAN\\models\\' + model_name + '\\weights\\discrim_weights_epoch-' + epoch + '.h5'
     optimizer = {
@@ -304,7 +334,7 @@ if __name__ == '__main__':
     # output_dir = os.path.join('/playpen/mhudnell_cvpr_2019/mhudnell/maxgan/models', model_name)
     output_dir = os.path.join('C:\\Users\\Max\\Research\\maxGAN\\models', model_name)
     weights_path = os.path.join(output_dir, 'weights', 'm_weights_epoch-{}.h5'.format(epoch))
-    poly_order = 4
+    poly_order = 6
     tau = 1.345
     M = poly_model.get_model_poly(None, poly_order, np.linspace(0.1, 1.0, 10), tau, past_frames, optimizer=optimizer,
     weights_path=weights_path)

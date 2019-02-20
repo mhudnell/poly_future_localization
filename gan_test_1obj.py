@@ -1,14 +1,17 @@
-#import gan_2obj
+#import gan_1obj
 import matplotlib
-# Force matplotlib to not use any Xwindows backend.
+# Force matplotlib to not use any Xwindows backend. (for afs use)
 matplotlib.use('Agg')
+
 import poly_model
 import data_extract_1obj
 import numpy as np
 import os
+import scipy
 
 import matplotlib.pyplot as plt
 from vis_tool import calc_metrics_all
+import vis_tool
 
 #MODEL_DIR = '/playpen/mhudnell_cvpr_2019/jtprice/L1-loss/models_poly_6'
 MODEL_DIR = '/playpen/mhudnell_cvpr_2019/mhudnell/maxgan/models'
@@ -58,7 +61,6 @@ def get_metrics(M, x, y):
     for i in range(x.shape[0]):
         ious[i], des[i] = calc_metrics_all(x[i][-4:], y[i], gen_transforms[i], offset_t=OFFSET_T)
 
-
     print("Metrics for model at epoch", EPOCH)
     print("ADE:", np.mean(des))
     print("+0.5sec DE:", np.mean(des[:, 4]))
@@ -74,11 +76,21 @@ def get_metrics(M, x, y):
     print("+0.5sec IoU:", np.mean(ious[:, 4]), file=metrics_file)
     print("+1.0sec IoU:", np.mean(ious[:, 9]), file=metrics_file)
 
+    #print(np.linspace(0.1,1.0,10).shape, np.mean(ious, axis=0).shape)
+    # fig1, ax1 = plt.subplots()    
+    # ax1.plot(np.linspace(0.1, 1.0, 10), np.mean(ious, axis=0))
+    # ax1.set_ylabel('mean IoU')
+    # ax1.set_xlabel('future timestep (seconds)')
+    # ax1.set_title('mean IoU over time')
+    # fig1.savefig(os.path.join(output_dir, 'mean_ious.png'))
+    
     iou_over_time(ious)
     timestep_hist(ious[:, 9])
     sigma_iou_scatter(gen_transforms[:, :, 9, 1], ious[:, 9])
     tx_ty_scatter(gen_transforms)
-    transf_hist(gen_transforms[:, :, 9, 0], y[:, :, 9, 0])
+    show_failures(OUTPUT_DIR, ious[:, 9], gen_transforms[:, :, :, 1], gen_transforms[:, :, :, 0], x, y, set_info)
+    #show_success(output_dir, ious[:, 9], gen_transforms[:, :, :, 1], gen_transforms[:, :, :, 0], x, y, set_info)
+    transf_hist(gen_transforms[:, :, 9, 0], y[:, :, 9, 0]) #gen_transforms[:, 0, 9, 0], y[:, 0, 9, 0]
 
 def iou_over_time(ious):
     fig1, ax1 = plt.subplots()    
@@ -87,6 +99,123 @@ def iou_over_time(ious):
     ax1.set_xlabel('future timestep (seconds)')
     ax1.set_title('mean IoU over time')
     fig1.savefig(os.path.join(OUTPUT_DIR, 'mean_ious.png'))
+
+def show_failures(output_dir, ious, sigmas, transforms, x, y, set_info):
+    start = 2500
+    stop = 3300
+    # output_dir = os.path.join(output_dir, 'failure_cases_mplt', 'range{}-{}_.1-.5'.format(start, stop))
+    output_dir = os.path.join(output_dir, 'failure_cases_mplt')
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    ids = data_extract_1obj.get_batch_ids(x.shape[0], x.shape[0])
+    count = 0
+    resultsFile = open(os.path.join(output_dir, 'results.txt'), 'w')
+    # for i in ids[start:stop]:
+    for i in range(len(ids)):
+        if count == 20:
+            break
+        # if ious[i] > 0.1 and ious[i] < 0.5 and set_info[i][2] == '0000000151' and set_info[i][3] == '16':
+        # if ious[i] < 0.1:
+        if set_info[i][2] == '0000000213' and set_info[i][3] == '55':
+            heatmap_overlay = create_heatmap(sigmas[i,:,9], transforms[i,:,9], x[i][-1])
+            vis_tool.draw_p_and_gt(set_info[i], x[i], transforms[i, :, 9], y[i, :, 9], output_dir, heatmap=heatmap_overlay, sigma=sigmas[i,:,9], draw_past=True)
+
+            print("seq:", os.path.basename(set_info[i][0]), file=resultsFile)
+            print("target frame / obj:", set_info[i][2], "/", set_info[i][3], file=resultsFile)
+            print("  mean sigma:", np.mean(sigmas[i, :, 9]), file=resultsFile)
+            print("  sigmas:", sigmas[i, :, 9], "\n", file=resultsFile)
+            count +=1
+
+def show_success(output_dir, ious, sigmas, transforms, x, y, set_info):
+    start = 0
+    stop = 500
+    output_dir = os.path.join(output_dir, 'success_cases_mplt')
+    # output_dir = os.path.join(output_dir, 'success_cases_mplt', 'range{}-{}'.format(start, stop))
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    ids = data_extract_1obj.get_batch_ids(x.shape[0], x.shape[0])
+    count = 0
+    resultsFile = open(os.path.join(output_dir, 'results.txt'), 'w')
+    # for i in ids[start:stop]:
+    for i in range(len(ids)):
+        if count == 20:
+            break
+        if ious[i] > 0.9:
+            heatmap_overlay = create_heatmap(sigmas[i,:,9], transforms[i,:,9], x[i][-1])
+            vis_tool.draw_p_and_gt(set_info[i], x[i], transforms[i, :, 9], y[i, :, 9], output_dir, heatmap=heatmap_overlay, sigma=sigmas[i,:,9], draw_past=True)
+
+            print("seq:", os.path.basename(set_info[i][0]), file=resultsFile)
+            print("target frame / obj:", set_info[i][2], "/", set_info[i][3], file=resultsFile)
+            print("  mean sigma:", np.mean(sigmas[i, :, 9]), file=resultsFile)
+            print("  sigmas:", sigmas[i, :, 9], "\n", file=resultsFile)
+            count +=1
+
+def create_heatmap(sigma, mean_t, anchor):
+    ts = np.empty((1000, 4))
+    for i in range(4):
+        ts[:, i] = sample_transfs(mean_t[i], sigma[i], 1000)
+    heatmap_overlay = vis_tool.draw_heatmap(anchor, ts)
+    return heatmap_overlay
+
+def sample_transfs(mean, sigma, num_samples):
+    xs = np.linspace(-5*sigma, 5*sigma, 1000)
+
+
+    pdf = np.array([get_p(x, sigma) for x in xs])
+    pdf /= np.sum(pdf)
+    cdf = np.cumsum(pdf) #/ np.sum(pdf)
+    # plt.hist(cdf, bins=100, histtype='step', cumulative=1)
+    # plt.plot(xs, pdf)
+    # plt.plot(xs, cdf)
+    # plt.title('cdf')
+    # plt.show()
+
+
+    # icdf = np.percentile(cdf, range(0, 101))
+    # icdf = (np.percentile(cdf, range(0, 101)) - 0.5) * 5*sigma
+    icdf = calc_icdf(xs, cdf)
+    # plt.plot(np.linspace(0.0, 1.0, 99), icdf)
+    # plt.title('icdf')
+    # plt.show()
+
+    samples = np.random.uniform(size=num_samples) * 99  #101?
+    # print(samples)
+    # print(samples.shape)
+    # print(icdf.shape)
+    x_s = icdf[samples.astype(int)]
+    # print(x_s.shape)
+    # plt.scatter(x_s, np.zeros_like(x_s))
+    # plt.title('x_s')
+    # plt.show()
+    return x_s + mean
+
+def calc_icdf(x, cdf):
+    i = 0
+    step = 0.01
+    t = step
+    icdf = []
+    while t <= 1.:
+        if cdf[i] <= t and t <= cdf[i+1]:
+            icdf.append((x[i] * (cdf[i + 1] - t) + x[i+1] * (t - cdf[i])) / (cdf[i+1] - cdf[i]))
+            # icdf.append((x[i] * (t - cdf[i]) + x[i+1] * (cdf[i+1] - t)) / (cdf[i+1] - cdf[i]))
+            t += step
+        i += 1
+
+    return np.array(icdf)
+
+def get_p(d_x, sigma):
+    tau = 1.345*sigma
+    c = sigma*np.sqrt(2*np.pi)*scipy.special.erf(tau/(sigma*np.sqrt(2))) + (2*np.square(sigma)/tau)*np.exp(-np.square(tau)/(2*np.square(sigma)))
+    p = (1/c)*np.exp(np.where(np.abs(d_x) < tau, gauss(d_x, sigma), laplace(d_x, sigma, tau)))
+    return p
+
+def gauss(d_x, sigma):
+    return -np.square(d_x)/(2*np.square(sigma))
+
+def laplace(d_x, sigma, tau):
+    return (-tau/(sigma*np.sqrt(2)))*np.abs(d_x) + np.square(tau)/(2*np.square(sigma))
 
 def tx_ty_scatter(transforms):
     fig3, ax3 = plt.subplots()
@@ -112,7 +241,7 @@ def timestep_hist(ious):
     ax2.set_ylabel('count')
     ax2.set_title('+1.0s IoU distribution')
     #fig2.savefig(os.path.join(OUTPUT_DIR, 'timestep_hist.png'))
-    fig2.show()
+    #fig2.show()
 
 def transf_hist(pred_ts, gt_ts):
     dims = ['x', 'y', 'w', 'h']

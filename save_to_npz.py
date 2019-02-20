@@ -4,12 +4,14 @@ from vis_tool import calc_metrics_all
 from data_extract_1obj import get_kitti_raw_tracklets
 from poly_model import get_model_poly
 
-MODEL_DIR = '/playpen/mhudnell_cvpr_2019/jtprice/L2-loss/models'
-MODEL_NAME = 'septic-test_t1.345xsig_seed-11-test0f_vehicles-nobike_7-fold_G3-64_adam-lr0.00146-b10.9-b20.999_bs512_epochs600'
-EPOCH = '511'
-POLY_ORDER = 5
+MODEL_DIR = '/playpen/mhudnell_cvpr_2019/mhudnell/maxgan/models'
+MODEL_NAME = 'lastmin-poly7_past10_t1.345xsig_seed11-0_vehicles-nobike_G3-64_adam-lr0.0005-b10.9-b20.999_bs128_epochs1100'
+EPOCH = '1100'
+POLY_ORDER = 7
 PAST_FRAMES = 10
 TAU = 1.345
+OFFSET_T = False
+OUTPUT_DIR = '/playpen/mhudnell_cvpr_2019/mhudnell/maxgan/lastmin' 
 
 def save_to_npz(M, x, y):
     x = x.reshape((-1, PAST_FRAMES*4))
@@ -21,10 +23,11 @@ def save_to_npz(M, x, y):
     ious = np.empty((num_samples, 10))
     des = np.empty((num_samples, 10))
     for i in range(x.shape[0]):
-        ious[i], des[i] = calc_metrics_all(x[i][-4:], y[i], gen_transforms[i])
+        ious[i], des[i] = calc_metrics_all(x[i][-4:], y[i], gen_transforms[i], offset_t=OFFSET_T)
 
     np.savez(
-         os.path.join(MODEL_DIR, MODEL_NAME, 'saved_results'),
+         #os.path.join(MODEL_DIR, MODEL_NAME, 'saved_results'),
+         os.path.join(OUTPUT_DIR, 'poly-{}'.format(POLY_ORDER)),
          target=y,
          pred=gen_transforms)
 
@@ -47,13 +50,13 @@ if __name__ == '__main__':
 
     timesteps = np.linspace(0.1, 1.0, 10)
     x_test, y_test, _ = get_kitti_raw_tracklets(
-        timesteps, sets=test_sets[0], class_types=['Car', 'Van', 'Truck'], past_frames=PAST_FRAMES)
+        timesteps, sets=test_sets[0], class_types=['Car', 'Van', 'Truck'], past_frames=PAST_FRAMES, offset_t=OFFSET_T)
 
     weights_path = os.path.join(
-        MODEL_DIR, 'weights', 'm_weights_epoch-{}.h5'.format(EPOCH)
+        MODEL_DIR, MODEL_NAME, 'weights', 'm_weights_epoch-{}.h5'.format(EPOCH)
         )
 
     M = get_model_poly(None, POLY_ORDER, timesteps,
-         TAU, PAST_FRAMES, optimizer=optimizer, weights_path=weights_path)
+        TAU, PAST_FRAMES, optimizer=optimizer, weights_path=weights_path)
 
     save_to_npz(M, x_test, y_test)

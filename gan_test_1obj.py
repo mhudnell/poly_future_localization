@@ -1,7 +1,8 @@
 #import gan_1obj
-# import matplotlib
-# # Force matplotlib to not use any Xwindows backend.
-# matplotlib.use('Agg')
+import matplotlib
+# Force matplotlib to not use any Xwindows backend. (for afs use)
+matplotlib.use('Agg')
+
 import poly_model
 import data_extract_1obj
 import numpy as np
@@ -11,6 +12,23 @@ import scipy
 import matplotlib.pyplot as plt
 from vis_tool import calc_metrics_all
 import vis_tool
+
+#MODEL_DIR = '/playpen/mhudnell_cvpr_2019/jtprice/L1-loss/models_poly_6'
+MODEL_DIR = '/playpen/mhudnell_cvpr_2019/mhudnell/maxgan/models'
+#MODEL_DIR = '/playpen/mhudnell_cvpr_2019/mhudnell/poly_future_localization/models'
+
+#MODEL_NAME = 'scaleinv-poly6_past10_t1.345xsig_seed11-0_vehicles-nobike_G3-64_adam-lr0.0005-b10.9-b20.999_bs128_epochs1100'
+#MODEL_NAME = 'poly6_past10_t1.345xsig_seed11-0_vehicles-nobike_G3-64_adam-lr0.0005-b10.9-b20.999_bs128_epochs1100'
+#MODEL_NAME = 'rnn_t1.345xsig_seed-11-test0_vehicles-nobike_7-fold_G3-64_adam-lr0.00146-b10.9-b20.999_bs512_epochs600'
+MODEL_NAME = 'poly6_past10_t1.345xsig_seed11-0_vehicles-nobike_G3-64_adam-lr0.0005-b10.9-b20.999_bs128_epochs1100'
+EPOCH = '1100'
+POLY_ORDER = 6
+PAST_FRAMES = 10
+TAU = 1.345
+DATA_SEED = 6
+OUTPUT_DIR = os.path.join(MODEL_DIR, MODEL_NAME)
+#OUTPUT_DIR = './L1figs'
+OFFSET_T = False
 
 def run_tests(generator_model, discriminator_model, combined_model, model_name, seed=6, dataset='kitti_tracking'):
 
@@ -30,24 +48,33 @@ def run_tests(generator_model, discriminator_model, combined_model, model_name, 
 
     gan_1obj.test_model_multiple(generator_model, discriminator_model, combined_model, model_name, test_data, test_data_info, dataset)
 
-def get_metrics(output_dir, M, x, y, set_info, past_frames):
-    x_in = x.reshape((-1, past_frames*4))
+def get_metrics(M, x, y):
+    x = x.reshape((-1, PAST_FRAMES*4))
     y = y.reshape((-1, 4, 10, 1))
     num_samples = x.shape[0]
-    out = M.predict(x_in)
+
+    out = M.predict(x)
     gen_transforms = out[0]
-    print("len(out):", len(out))
-    print(out[0].shape)
-    print(out[1].shape)
 
     ious = np.empty((num_samples, 10))
     des = np.empty((num_samples, 10))
     for i in range(x.shape[0]):
-        ious[i], des[i] = calc_metrics_all(x_in[i][-4:], y[i], gen_transforms[i])
+        ious[i], des[i] = calc_metrics_all(x[i][-4:], y[i], gen_transforms[i], offset_t=OFFSET_T)
 
+    print("Metrics for model at epoch", EPOCH)
     print("ADE:", np.mean(des))
-    print("FDE:", np.mean(des[:, 9]))
-    print("FIOU:", np.mean(ious[:, 9]))  
+    print("+0.5sec DE:", np.mean(des[:, 4]))
+    print("+1.0sec DE:", np.mean(des[:, 9]))
+    print("+0.5sec IoU:", np.mean(ious[:, 4]))
+    print("+1.0sec IoU:", np.mean(ious[:, 9]))
+
+    metrics_file = open(os.path.join(OUTPUT_DIR, 'metrics_{}.txt'.format(EPOCH)), 'w') 
+    print("Metrics for model at epoch", EPOCH, file=metrics_file)
+    print("ADE:", np.mean(des), file=metrics_file)
+    print("+0.5sec DE:", np.mean(des[:, 4]), file=metrics_file)
+    print("+1.0sec DE:", np.mean(des[:, 9]), file=metrics_file)
+    print("+0.5sec IoU:", np.mean(ious[:, 4]), file=metrics_file)
+    print("+1.0sec IoU:", np.mean(ious[:, 9]), file=metrics_file)
 
     #print(np.linspace(0.1,1.0,10).shape, np.mean(ious, axis=0).shape)
     # fig1, ax1 = plt.subplots()    
@@ -56,13 +83,22 @@ def get_metrics(output_dir, M, x, y, set_info, past_frames):
     # ax1.set_xlabel('future timestep (seconds)')
     # ax1.set_title('mean IoU over time')
     # fig1.savefig(os.path.join(output_dir, 'mean_ious.png'))
-
-    #timestep_hist(output_dir, ious[:, 9])
-    #sigma_iou_scatter(output_dir, gen_transforms[:, :, 9, 1], ious[:, 9])
-    # tx_ty_scatter(output_dir, gen_transforms)
-    show_failures(output_dir, ious[:, 9], gen_transforms[:, :, :, 1], gen_transforms[:, :, :, 0], x, y, set_info)
+    
+    iou_over_time(ious)
+    timestep_hist(ious[:, 9])
+    sigma_iou_scatter(gen_transforms[:, :, 9, 1], ious[:, 9])
+    tx_ty_scatter(gen_transforms)
+    show_failures(OUTPUT_DIR, ious[:, 9], gen_transforms[:, :, :, 1], gen_transforms[:, :, :, 0], x, y, set_info)
     #show_success(output_dir, ious[:, 9], gen_transforms[:, :, :, 1], gen_transforms[:, :, :, 0], x, y, set_info)
-    #transf_hist(output_dir, gen_transforms[:, 0, 9, 0], y[:, 0, 9, 0])
+    transf_hist(gen_transforms[:, :, 9, 0], y[:, :, 9, 0]) #gen_transforms[:, 0, 9, 0], y[:, 0, 9, 0]
+
+def iou_over_time(ious):
+    fig1, ax1 = plt.subplots()    
+    ax1.plot(np.linspace(0.1, 1.0, 10), np.mean(ious, axis=0))
+    ax1.set_ylabel('mean IoU')
+    ax1.set_xlabel('future timestep (seconds)')
+    ax1.set_title('mean IoU over time')
+    fig1.savefig(os.path.join(OUTPUT_DIR, 'mean_ious.png'))
 
 def show_failures(output_dir, ious, sigmas, transforms, x, y, set_info):
     start = 2500
@@ -182,34 +218,44 @@ def gauss(d_x, sigma):
 def laplace(d_x, sigma, tau):
     return (-tau/(sigma*np.sqrt(2)))*np.abs(d_x) + np.square(tau)/(2*np.square(sigma))
 
-
-
-def tx_ty_scatter(output_dir, transforms):
+def tx_ty_scatter(transforms):
     fig3, ax3 = plt.subplots()
     ax3.scatter(transforms[:, 0, 9, 0], transforms[:, 1, 9, 0])
     ax3.set_xlabel('tx')
     ax3.set_ylabel('ty')
     ax3.set_title('tx v ty')
-    fig3.savefig(os.path.join(output_dir, 'tx_ty_scatter.png'))
+    fig3.tight_layout()
+    fig3.savefig(os.path.join(OUTPUT_DIR, 'tx_ty_scatter.png'))
 
-def timestep_hist(output_dir, ious):
-    fig2, ax2 = plt.subplots()
-    ax2.hist(ious, bins=20)
+def timestep_hist(ious):
+    np.savez(
+         #os.path.join(MODEL_DIR, MODEL_NAME, 'saved_results'),
+         os.path.join('/playpen/mhudnell_cvpr_2019/mhudnell/maxgan/', 'hist_data'),  #'past-{}'.format(PAST_FRAMES)),
+         data=ious,
+         )
+
+
+    fig2, ax2 = plt.subplots(1, 1, figsize=(6,5))
+    ax2.hist(ious, bins=20, color='r')
+    ax2.set_ylim(0, 400)
     ax2.set_xlabel('+1.0s IoU')
     ax2.set_ylabel('count')
     ax2.set_title('+1.0s IoU distribution')
-    fig2.savefig(os.path.join(output_dir, 'timestep_hist.png'))
+    #fig2.savefig(os.path.join(OUTPUT_DIR, 'timestep_hist.png'))
+    #fig2.show()
 
-def transf_hist(output_dir, pred_ts, gt_ts):
-    fig2, ax2 = plt.subplots()
-    ax2.hist([pred_ts, gt_ts], bins=30, label=['predicted', 'ground truth'])
-    ax2.legend()
-    ax2.set_xlabel('+1.0s tx')
-    ax2.set_ylabel('count')
-    ax2.set_title('+1.0s tx distribution')
-    fig2.savefig(os.path.join(output_dir, 'tx_hist.png'))
+def transf_hist(pred_ts, gt_ts):
+    dims = ['x', 'y', 'w', 'h']
+    for i, dim in enumerate(dims):
+        fig2, ax2 = plt.subplots()
+        ax2.hist([pred_ts[:, i], gt_ts[:, i]], bins=30, label=['predicted', 'ground truth'])
+        ax2.legend()
+        ax2.set_xlabel('+1.0s t{}'.format(dim))
+        ax2.set_ylabel('count')
+        ax2.set_title('+1.0s t{} distribution'.format(dim))
+        fig2.savefig(os.path.join(OUTPUT_DIR, 't{}_hist.png'.format(dim)))
 
-def sigma_iou_scatter(output_dir, sigmas, ious):
+def sigma_iou_scatter(sigmas, ious):
     """sigma v iou scatter plot for 1 timestep"""
     print(sigmas.shape)
     print(ious.shape)
@@ -218,9 +264,9 @@ def sigma_iou_scatter(output_dir, sigmas, ious):
     ax3.set_xlabel('sigma (uncertainty)')
     ax3.set_ylabel('IoU')
     ax3.set_title('sigma v. +1.0s Iou')
-    fig3.savefig(os.path.join(output_dir, 'sigma_iou_scatter.png'))
+    fig3.savefig(os.path.join(OUTPUT_DIR, 'sigma_iou_scatter.png'))
 
-def multimodel_timestep_hist(x, y, past_frames, optimizer):
+def multimodel_timestep_hist(test_set, optimizer):
 
     model_names = [
     'quad-test_t1.345xsig_seed-11-test0f_vehicles-nobike_7-fold_G3-64_adam-lr0.00146-b10.9-b20.999_bs512_epochs600',
@@ -229,22 +275,39 @@ def multimodel_timestep_hist(x, y, past_frames, optimizer):
     'quintic-test_t1.345xsig_seed-11-test0f_vehicles-nobike_7-fold_G3-64_adam-lr0.00146-b10.9-b20.999_bs512_epochs600',
     'sextic-test_t1.345xsig_seed-11-test0f_vehicles-nobike_7-fold_G3-64_adam-lr0.00146-b10.9-b20.999_bs512_epochs600',
     ]
-    epochs = [300, 300, 300, 300, 300, 300]
-
-    x = x.reshape((-1, past_frames*4))
-    y = y.reshape((-1, 4, 10, 1))
-    num_samples = x.shape[0]
+    model_names = [
+    'd5_past2-test_t1.345xsig_seed-11-test0_vehicles-nobike_7-fold_G3-64_adam-lr0.00146-b10.9-b20.999_bs512_epochs600',
+    'd5_past3-test_t1.345xsig_seed-11-test0_vehicles-nobike_7-fold_G3-64_adam-lr0.00146-b10.9-b20.999_bs512_epochs600',
+    'd5_past5-test_t1.345xsig_seed-11-test0_vehicles-nobike_7-fold_G3-64_adam-lr0.00146-b10.9-b20.999_bs512_epochs600',
+    'd5_past7-test_t1.345xsig_seed-11-test0_vehicles-nobike_7-fold_G3-64_adam-lr0.00146-b10.9-b20.999_bs512_epochs600',
+    'quintic-test_t1.345xsig_seed-11-test0f_vehicles-nobike_7-fold_G3-64_adam-lr0.00146-b10.9-b20.999_bs512_epochs600'
+    ]
+    epochs = [550,550,551,550,550]
+    past_frames = [2,3,5,7,10]
+#    x = x.reshape((-1, past_frames*4))
+#    y = y.reshape((-1, 4, 10, 1))
+    
+    x, y, set_info = data_extract_1obj.get_kitti_raw_tracklets(np.linspace(0.1, 1.0, 10), sets=test_set, class_types=['Car', 'Van', 'Truck'], past_frames=10)
+    num_samples = y.shape[0]
     all_ious = np.empty((len(model_names), num_samples, 10))
 
     tau = 1.345
+    poly_order = 5
     for i, model_name in enumerate(model_names):
-        poly_order = 2 + i
+        #poly_order = 2 + i
+        x, y, set_info = data_extract_1obj.get_kitti_raw_tracklets(np.linspace(0.1, 1.0, 10), sets=test_set, class_types=['Car', 'Van', 'Truck'], past_frames=past_frames[i])
+        x = x.reshape((-1, past_frames[i]*4))
+        y = y.reshape((-1, 4, 10, 1))
         weights_path = os.path.join('/playpen/mhudnell_cvpr_2019/mhudnell/maxgan/models', model_name, 'weights/m_weights_epoch-{}.h5'.format(epochs[i]))
-        M = poly_model.get_model_poly(None, poly_order, np.linspace(0.1, 1.0, 10), tau, past_frames, optimizer=optimizer, weights_path=weights_path)
+        M = poly_model.get_model_poly(None, poly_order, np.linspace(0.1, 1.0, 10), tau, past_frames[i], optimizer=optimizer, weights_path=weights_path)
         out = M.predict(x)
         gen_transforms = out[0]
         print(weights_path)
         print(gen_transforms.shape)
+        np.savez(
+             os.path.join(OUTPUT_DIR, "past_{}.npz".format(past_frames[i])),
+             target=y,
+             pred=gen_transforms)
         ious = np.empty((num_samples, 10))
         des = np.empty((num_samples, 10))
         for j in range(num_samples):
@@ -284,34 +347,18 @@ def mult_iou_threshold(all_ious):
     print(np.array(y).shape)
     fig2, ax2 = plt.subplots()
     #ax2.bar(np.linspace(0.05, 1, 20), y, label=[2,3,4,5,6])
-    for i in range(5):    
-        ax2.plot(x[i], y[i], label=i+2)
+    for i, f in enumerate([2,3,5,7,10]):    
+        ax2.plot(x[i], y[i], label='{} frames'.format(f))
     ax2.legend()
     ax2.set_xlabel('+1.0s IoU threshold')
-    ax2.set_ylabel('# above')
-    ax2.set_title('degree comparison via +1.0s IoU distributions ')
-    fig2.savefig(os.path.join(output_dir, 'poly_degree_threshold.png'))
+    ax2.set_ylabel('% predictions above threshold')
+    ax2.set_title('+1.0s IoU distributions')
+    fig2.savefig(os.path.join(output_dir, 'd5-poly_past_threshold.png'))
 
     for i in range(len(y)):
         print(i+2, "AUC:", np.sum(y[i]) / 100)
 
 if __name__ == '__main__':
-    ## TESTING ##
-    data_cols = []
-    for fNum in range(1, 12):
-        for char in ['L', 'T', 'W', 'H']:
-            data_cols.append(char + str(fNum))
-
-    # LOAD MODEL
-    # model_name = 'quartic_sigma-2coeff-abs_red-sum_huber_t1.345xsig_seed-11-test0_vehicles-nobike_7-fold_g3-64_adam-lr0.00146-b10.9-b20.999_bs512_epochs600'
-    model_name = 'poly6_past10_t1.345xsig_seed11-0_vehicles-nobike_G3-64_adam-lr0.0005-b10.9-b20.999_bs128_epochs1100'
-    #model_name = 'quartic-test_t1.345xsig_seed-11-test0f_vehicles-nobike_7-fold_G3-64_adam-lr0.00146-b10.9-b20.999_bs512_epochs600'
-    #model_name = 'sextic-test_t1.345xsig_seed-11-test0f_vehicles-nobike_7-fold_G3-64_adam-lr0.00146-b10.9-b20.999_bs512_epochs600'
-    # model_name = 'd5_past5-test_t1.345xsig_seed-11-test0_vehicles-nobike_7-fold_G3-64_adam-lr0.00146-b10.9-b20.999_bs512_epochs600'
-    # epoch = '511'
-    epoch = '1100'
-#    generator_model_path = 'C:\\Users\\Max\\Research\\maxGAN\\models\\' + model_name + '\\weights\\gen_weights_epoch-' + epoch + '.h5'
-#    discriminator_model_path = 'C:\\Users\\Max\\Research\\maxGAN\\models\\' + model_name + '\\weights\\discrim_weights_epoch-' + epoch + '.h5'
     optimizer = {
                 'name': 'adam',
                 'lr': .00146,        # default: .001
@@ -320,33 +367,18 @@ if __name__ == '__main__':
                 'decay': 0       # default: 0
                 }
 
-    #generator_model, discriminator_model, combined_model = gan_1obj.get_model(data_cols, generator_model_path=generator_model_path,
-    #    discriminator_model_path=discriminator_model_path, optimizer=optimizer, w_adv=1.0)
-
-    #run_tests(generator_model, discriminator_model, combined_model, model_name, seed=10, dataset='kitti_raw_tracklets')
-    past_frames = 10
-    np.random.seed(11)
+    np.random.seed(DATA_SEED)
     all_sets = np.arange(38)
     test_sets = np.random.choice(all_sets, (3,10), replace=False)
-    x_test, y_test, set_info = data_extract_1obj.get_kitti_raw_tracklets(np.linspace(0.1, 1.0, 10), sets=test_sets[0], class_types=['Car', 'Van', 'Truck'], past_frames=past_frames)
+    #print(test_sets)
+
+    x_test, y_test, _ = data_extract_1obj.get_kitti_raw_tracklets(np.linspace(0.1, 1.0, 10), sets=test_sets[0], class_types=['Car', 'Van', 'Truck'], past_frames=PAST_FRAMES, offset_t=OFFSET_T)
     
-    # multimodel_timestep_hist(x_test, y_test, past_frames, optimizer=optimizer)
+    weights_path = os.path.join(MODEL_DIR, MODEL_NAME, 'weights/m_weights_epoch-{}.h5'.format(EPOCH))
+    M = poly_model.get_model_poly(None, POLY_ORDER, np.linspace(0.1, 1.0, 10), TAU, PAST_FRAMES, optimizer=optimizer,
+	 weights_path=weights_path)
 
-    # output_dir = os.path.join('/playpen/mhudnell_cvpr_2019/mhudnell/maxgan/models', model_name)
-    output_dir = os.path.join('C:\\Users\\Max\\Research\\maxGAN\\models', model_name)
-    weights_path = os.path.join(output_dir, 'weights', 'm_weights_epoch-{}.h5'.format(epoch))
-    poly_order = 6
-    tau = 1.345
-    M = poly_model.get_model_poly(None, poly_order, np.linspace(0.1, 1.0, 10), tau, past_frames, optimizer=optimizer,
-    weights_path=weights_path)
-    get_metrics(output_dir, M, x_test, y_test, set_info, past_frames) 
+    get_metrics(M, x_test, y_test) 
+    #multimodel_timestep_hist(test_sets[0], optimizer=optimizer)
 
 
-    # Deprecated
-    # step = '13700'
-    # generator_model_path = 'C:\\Users\\Max\\Research\\maxGAN\\models\\' + model_name + '\\weights\\gen_weights_step_' + step + '.h5'
-    # discriminator_model_path = 'C:\\Users\\Max\\Research\\maxGAN\\models\\' + model_name + '\\weights\\discrim_weights_step_' + step + '.h5'
-
-    # gan_1obj.test_model(generator_model, discriminator_model, combined_model, model_name)
-    # gan_1obj.test_model_multiple(generator_model, discriminator_model, combined_model, model_name)
-    # gan_1obj.test_model_IOU(generator_model, discriminator_model, combined_model, model_name)

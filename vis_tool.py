@@ -241,14 +241,16 @@ def draw_heatmap(anchor, transforms):
 
 class Rect:
     def __init__(self, l, t, r, b):
-        assert (l <= r), "l not greater than r"
-        assert (t <= b), "t not greater than b"
+        #assert (l <= r), "l not greater than r"
+        #assert (t <= b), "t not greater than b"
 
         self.l = l
         self.t = t
         self.r = r
         self.b = b
         self.area = (r - l) * (b - t)
+        if l > r or t > b:
+            self.area = 0
 
     def __str__(self):
         return "l:" + str(self.l) + " t:" + str(self.t) + " r:" + str(self.r) + " b:" + str(self.b) + " area:" + str(self.area)
@@ -330,7 +332,7 @@ def calc_metrics(anchor, target_transform, generated_transform, sample_set=None)
 
     return iou, de
 
-def calc_metrics_mult(anchor, target_transforms, generated_transforms, sample_set=None):
+def calc_metrics_train(anchor, target_transforms, generated_transforms, sample_set=None):
     """ Calculates displacement error and IoU metrics for 0.5 and 1.0 sec predictions"""
 
     ious = np.empty(2)
@@ -338,8 +340,8 @@ def calc_metrics_mult(anchor, target_transforms, generated_transforms, sample_se
     for i, j in enumerate([4, 9]):
         t_bb = data_extract_1obj.transform(anchor, target_transforms[:, j, 0])
         g_bb = data_extract_1obj.transform(anchor, generated_transforms[:, j, 0])
-        # t_bb = data_extract_1obj.transform_offset(anchor, target_transforms[:, j, 0])
-        # g_bb = data_extract_1obj.transform_offset(anchor, generated_transforms[:, j, 0])
+        #t_bb = data_extract_1obj.transform_offset(anchor, target_transforms[:, j, 0])
+        #g_bb = data_extract_1obj.transform_offset(anchor, generated_transforms[:, j, 0])
         t_bb = data_extract_1obj.unnormalize_bb(t_bb, sample_set=sample_set)
         g_bb = data_extract_1obj.unnormalize_bb(g_bb, sample_set=sample_set)
 
@@ -351,14 +353,17 @@ def calc_metrics_mult(anchor, target_transforms, generated_transforms, sample_se
 
     return ious, des
 
-def calc_metrics_all(anchor, target_transforms, generated_transforms, sample_set=None):
-    """ Calculates displacement error and IoU metrics for 0.1-1.0 sec predictions"""
-
+def calc_metrics_all(anchor, target_transforms, generated_transforms, sample_set=None, offset_t=False):
+    """ Calculates displacement error and IoU metrics for 0.5 and 1.0 sec predictions"""
     ious = np.empty(10)
     des = np.empty(10)
     for i in range(10):
-        t_bb = data_extract_1obj.transform(anchor, target_transforms[:, i, 0])
-        g_bb = data_extract_1obj.transform(anchor, generated_transforms[:, i, 0])
+        if offset_t:
+            t_bb = data_extract_1obj.transform_offset(anchor, target_transforms[:, i, 0])
+            g_bb = data_extract_1obj.transform_offset(anchor, generated_transforms[:, i, 0])
+        else:        
+            t_bb = data_extract_1obj.transform(anchor, target_transforms[:, i, 0])
+            g_bb = data_extract_1obj.transform(anchor, generated_transforms[:, i, 0])
         t_bb = data_extract_1obj.unnormalize_bb(t_bb, sample_set=sample_set)
         g_bb = data_extract_1obj.unnormalize_bb(g_bb, sample_set=sample_set)
 

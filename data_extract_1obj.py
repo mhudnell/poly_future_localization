@@ -155,7 +155,7 @@ def get_kitti_data(sets, normalize=True, transform=True):
 
         return np.asarray(samples), samples_info
 
-def get_kitti_raw_tracklets(timepoints, sets=None, normalize=True, use_occluded=True, class_types=['Car', 'Van', 'Truck'], past_frames=10):
+def get_kitti_raw_tracklets(timepoints, sets=None, normalize=True, use_occluded=True, class_types=['Car', 'Van', 'Truck'], past_frames=10, offset_t=False):
     """
     Parse kitti tracklet files and construct a set of samples [input X and targets Y].
 
@@ -229,8 +229,10 @@ def get_kitti_raw_tracklets(timepoints, sets=None, normalize=True, use_occluded=
 
                         y_sample = np.empty((4, len(future_frames)))
                         for i, j in enumerate(future_frames):
-                            t = get_transformation(object_queue[9], object_queue[9+j])
-                            # t = get_offset_t(object_queue[9], object_queue[9+j])
+                            if offset_t:
+                                t = get_offset_t(object_queue[9], object_queue[9+j])
+                            else:
+                                t = get_transformation(object_queue[9], object_queue[9+j])
                             y_sample[:, i] = t
 
                         x.append(x_sample)
@@ -402,6 +404,15 @@ def get_transformation(anchor, target):
     t[1] = (target[1] - anchor[1]) / anchor[3]
     t[2] = log(target[2] / anchor[2])
     t[3] = log(target[3] / anchor[3])
+    return t
+
+def get_offset_t(anchor, target):
+    """Calculate the transformation (t), which goes from the anchor box, to the target box."""
+    t = np.empty(4)
+    t[0] = target[0] - anchor[0]
+    t[1] = target[1] - anchor[1]
+    t[2] = target[2] - anchor[2]
+    t[3] = target[3] - anchor[3]
     return t
 
 def transform(anchor, t):

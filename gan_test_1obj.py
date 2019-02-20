@@ -79,11 +79,12 @@ def show_failures(output_dir, ious, sigmas, transforms, x, y, set_info):
     for i in range(len(ids)):
         if count == 20:
             break
-        # if ious[i] > 0.1 and ious[i] < 0.5 and set_info[i][2] == '0000000151' and set_info[i][3] == '16':
+        if ious[i] > 0.1 and ious[i] < 0.5 and set_info[i][2] == '0000000151' and set_info[i][3] == '16':
         # if ious[i] < 0.1:
-        if set_info[i][2] == '0000000213' and set_info[i][3] == '55':
+        # if set_info[i][2] == '0000000213' and set_info[i][3] == '55':
             heatmap_overlay = create_heatmap(sigmas[i,:,9], transforms[i,:,9], x[i][-1])
-            vis_tool.draw_p_and_gt(set_info[i], x[i], transforms[i, :, 9], y[i, :, 9], output_dir, heatmap=heatmap_overlay, sigma=sigmas[i,:,9], draw_past=True)
+            # vis_tool.draw_p_and_gt(set_info[i], x[i], transforms[i, :, 9], y[i, :, 9], output_dir, heatmap=heatmap_overlay, sigma=sigmas[i,:,9], draw_past=True)
+            vis_tool.draw_p_and_gt(set_info[i], x[i], transforms[i, :, 9], y[i, :, 9], output_dir, heatmap=None, sigma=sigmas[i,:,9], draw_past=True)
 
             print("seq:", os.path.basename(set_info[i][0]), file=resultsFile)
             print("target frame / obj:", set_info[i][2], "/", set_info[i][3], file=resultsFile)

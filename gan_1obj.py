@@ -10,7 +10,7 @@ import tensorflow as tf
 import os
 import re
 
-from vis_tool import drawFrameRects, get_IoU, Rect, calc_metrics
+from vis_tool import drawFrameRects, get_IoU, Rect, calc_metrics, calc_metrics_polynomial
 import data_extract_1obj
 
 # def iou_metric(input):
@@ -46,7 +46,7 @@ def generator_network(x, discrim_input_dim, base_n_count, poly_order, timepoints
 
 #    x = layers.Dense(4, activation="linear", name="g_output")(x)
     coeffs = layers.Dense(4 * poly_order, activation="linear", name="coeffs")(x)
-    coeffs = layers.Reshape(4, poly_order)(coeffs)
+    coeffs = layers.Reshape((4, poly_order))(coeffs)
     timepoints = K.constant(
         [[pow(t, i) for t in timepoints] for i in range(1, poly_order + 1)])
     output_op = layers.Lambda(lambda x: K.dot(x, timepoints))
@@ -70,7 +70,6 @@ def discriminator_network(x, discrim_input_dim, base_n_count):
     x = layers.Dense(32, activation="relu")(x)
     x = layers.Dense(32, activation="relu")(x)
     x = layers.Dense(32, activation="relu")(x)
-
     # x = layers.Dense(64, activation="relu")(x)
     # x = layers.Dense(64, activation="relu")(x)
     # x = layers.Dense(64, activation="relu")(x)
@@ -96,21 +95,21 @@ def define_models_GAN(gen_input_dim, discrim_input_dim, base_n_count,
     # 2. D takes generated tensor + G_input as input, returns a tensor which is the combined output
     C_G_output = G(G_input)
     C_output = D(layers.concatenate([G_input, C_G_output]))
-    C = models.Model(inputs=[G_input], outputs=[C_output, C_G_output], name='combined')
+    C = models.Model(inputs=[G_input], outputs=[G.get_layer('coeffs').output, C_output, C_G_output], name='combined')
 
     return G, D, C
 
-def training_steps_GAN(train_data, train_data_info, val_data, val_data_info, model_components):
+def training_steps_GAN(x_train, x_val, y_train, y_val, train_info, val_info, model_components):
     """ """
     [model_name, starting_step, data_cols,
      label_cols, label_dim,
      generator_model, discriminator_model, combined_model,
      epochs, batch_size, k_d, k_g,
      show, output_dir] = model_components
-    steps_per_epoch = len(train_data) // batch_size
+    steps_per_epoch = len(x_train) // batch_size
     nb_steps = steps_per_epoch*epochs
-    val_data_input = val_data.reshape((len(val_data), -1))[:, :10*4]
-    val_data_target = val_data.reshape((len(val_data), -1))[:, -4:]
+    val_input = x_val.reshape((len(y_train), 40))
+    val_target = y_val
 
     # Store loss values for returning.
     G_losses = np.empty((nb_steps, 3))          # [g_loss, g_loss_adv, smoothL1]
@@ -124,14 +123,14 @@ def training_steps_GAN(train_data, train_data_info, val_data, val_data_info, mod
     # Store average discrim prediction for generated and real samples every epoch.
     avg_gen_pred, avg_real_pred = [], []
 
-    if not os.path.exists(output_dir + 'weights\\'):
-        os.makedirs(output_dir + 'weights\\')
-    lossFile = open(output_dir + 'losses.txt', 'w')
+    if not os.path.exists(os.path.join(output_dir, 'weights')):
+        os.makedirs(os.path.join(output_dir, 'weights'))
+    lossFile = open(os.path.join(output_dir, 'losses.txt'), 'w')
 
     # Log model structure to json
-    with open(output_dir+"D_model.json", "w") as f:
+    with open(os.path.join(output_dir, 'D_model.json'), "w") as f:
         f.write(discriminator_model.to_json(indent=4))
-    with open(output_dir+"G_model.json", "w") as f:
+    with open(os.path.join(output_dir, 'G_model.json'), "w") as f:
         f.write(generator_model.to_json(indent=4))
 
     # # PRETRAIN D
@@ -154,41 +153,44 @@ def training_steps_GAN(train_data, train_data_info, val_data, val_data_info, mod
         K.set_learning_phase(1)
 
         # TRAIN DISCRIMINATOR on real and generated images
-        for _ in range(k_d):
-            batch = data_extract_1obj.get_batch(train_data, batch_size)
-            gen_input = batch[:, :10*4]  # Only keep first 10 bounding boxes for gen input (11th is the target)
+        # for _ in range(k_d):
+        #     batch = data_extract_1obj.get_batch(train_data, batch_size)
+        #     gen_input = batch[:, :10*4]  # Only keep first 10 bounding boxes for gen input (11th is the target)
 
-            g_z = generator_model.predict(gen_input)
-            g_z = np.concatenate((gen_input, g_z), axis=1)
+        #     g_z = generator_model.predict(gen_input)
+        #     g_z = np.concatenate((gen_input, g_z), axis=1)
 
-            ### TRAIN ON REAL (y = 1) w/ noise
-            D_loss_real = discriminator_model.train_on_batch(batch, np.random.uniform(low=0.999, high=1.0, size=batch_size))      # 0.7, 1.2 GANs need noise to prevent loss going to zero
+        #     ### TRAIN ON REAL (y = 1) w/ noise
+        #     D_loss_real = discriminator_model.train_on_batch(batch, np.random.uniform(low=0.999, high=1.0, size=batch_size))      # 0.7, 1.2 GANs need noise to prevent loss going to zero
 
-            ### TRAIN ON GENERATED (y = 0) w/ noise
-            D_loss_fake = discriminator_model.train_on_batch(g_z, np.random.uniform(low=0.0, high=0.001, size=batch_size))    # SIGMIOD # 0.0, 0.3
-            # D_loss_fake = discriminator_model.train_on_batch(g_z, np.random.uniform(low=-1.0, high=-0.999, size=batch_size))    # TANH
-            D_loss = 0.5 * np.add(D_loss_real, D_loss_fake)
+        #     ### TRAIN ON GENERATED (y = 0) w/ noise
+        #     D_loss_fake = discriminator_model.train_on_batch(g_z, np.random.uniform(low=0.0, high=0.001, size=batch_size))    # SIGMIOD # 0.0, 0.3
+        #     # D_loss_fake = discriminator_model.train_on_batch(g_z, np.random.uniform(low=-1.0, high=-0.999, size=batch_size))    # TANH
+        #     D_loss = 0.5 * np.add(D_loss_real, D_loss_fake)
 
         # Only keep most recent loss value (if k_d > 1)
         # D_losses[i-1] = np.array([D_loss, D_loss_real, D_loss_fake])
 
         # TRAIN GENERATOR on real inputs and outputs
         for _ in range(k_g):
-            batch = data_extract_1obj.get_batch(train_data, batch_size)
-            gen_input = batch[:, :10*4]  # Only keep first 10 bounding boxes for gen input (11th is the target)
-            gen_target = batch[:, -4:]  # Get last (target) bounding box
+            batch_ids = data_extract_1obj.get_batch_ids(len(x_train), batch_size)
+            gen_input = x_train[batch_ids].reshape((batch_size, 40))
+            gen_target = y_train[batch_ids]
+
+            # gen_input = batch[:, :10*4]  # Only keep first 10 bounding boxes for gen input (11th is the target)
+            # gen_target = batch[:, -4:]  # Get last (target) bounding box
 
             ### TRAIN (y = 1) bc want pos feedback for tricking discrim (want discrim to output 1)
             G_loss = combined_model.train_on_batch(gen_input, {'discriminator': np.random.uniform(low=0.999, high=1.0, size=batch_size),
                                                                'generator': gen_target})
-            y_preds = G_loss[4]
+            coeffs = G_loss[4]
 
-            batch_ious = np.empty(len(y_preds))
-            batch_des = np.empty(len(y_preds))
-            for j in range(len(y_preds)):
-                batch_ious[j], batch_des[j] = calc_metrics(gen_input[j][-4:], gen_target[j], y_preds[j])
+            # Calculate IoU and DE metrics.
+            batch_ious = np.empty(batch_size)
+            batch_des = np.empty(batch_size)
+            for j in range(batch_size):
+                batch_ious[j], batch_des[j] = calc_metrics_polynomial(gen_input[j][-4:], gen_target[j][:, 9], coeffs[j])
 
-            # avg_iou = np.mean([get_IoU(gen_input[j][-4:], gen_target[j], y_preds[j]) for j in range(len(y_preds))])
             avg_iou = np.mean(batch_ious)
             avg_de = np.mean(batch_des)
 
@@ -202,20 +204,20 @@ def training_steps_GAN(train_data, train_data_info, val_data, val_data_info, mod
             epoch = i // steps_per_epoch
 
             # Evaluate on validation set
-            val_loss = combined_model.test_on_batch(val_data_input, {'discriminator': np.random.uniform(low=0.999, high=1.0, size=len(val_data_target)),
-                                                                     'generator': val_data_target})
+            num_val_samples = len(val_input)
+            val_loss = combined_model.test_on_batch(val_input, {'discriminator': np.random.uniform(low=0.999, high=1.0, size=num_val_samples),
+                                                                'generator': val_target})
             y_preds = val_loss[4]
 
-            val_batch_ious = np.empty(len(y_preds))
-            val_batch_des = np.empty(len(y_preds))
-            for j in range(len(val_loss[4])):
-                val_batch_ious[j], val_batch_des[j] = calc_metrics(val_data_input[j][-4:], val_data_target[j], y_preds[j])
-                        # val_avg_iou = np.mean([get_IoU(val_data_input[i][-4:], val_data_target[i], val_loss[4][i]) for i in range(len(val_loss[4]))])
+            val_batch_ious = np.empty(num_val_samples)
+            val_batch_des = np.empty(num_val_samples)
+            for j in range(num_val_samples):
+                val_batch_ious[j], val_batch_des[j] = calc_metrics_polynomial(val_input[j][-4:], val_target[j][:, 9], coeffs[j])
 
             # Print first sample.
-            t_bb = data_extract_1obj.transform(val_data_input[0][-4:], val_data_target[0])
+            t_bb = data_extract_1obj.transform(val_input[0][-4:], val_target[0][:, 9])
             t_bb = data_extract_1obj.unnormalize_bb(t_bb, sample_set=None)
-            g_bb = data_extract_1obj.transform(val_data_input[0][-4:], y_preds[0])
+            g_bb = data_extract_1obj.transform(val_input[0][-4:], y_preds[0][:, 9])
             g_bb = data_extract_1obj.unnormalize_bb(g_bb, sample_set=None)
             print("proposal: ", g_bb)
             print("target: ", t_bb)
@@ -228,9 +230,9 @@ def training_steps_GAN(train_data, train_data_info, val_data, val_data_info, mod
             val_des[epoch-1] = val_avg_de
 
             # Evaluate discriminator predictions
-            a_g_p, a_r_p = test_discrim(train_data, generator_model, discriminator_model, combined_model)
-            avg_gen_pred.append(a_g_p)
-            avg_real_pred.append(a_r_p)
+            # a_g_p, a_r_p = test_discrim(train_data, generator_model, discriminator_model, combined_model)
+            # avg_gen_pred.append(a_g_p)
+            # avg_real_pred.append(a_r_p)
 
             # Log loss info to console / file
             print('Epoch: {} of {}'.format(epoch, nb_steps // steps_per_epoch))
@@ -239,7 +241,7 @@ def training_steps_GAN(train_data, train_data_info, val_data, val_data_info, mod
             print('val_losses: {}'.format(val_losses[epoch-1]))
             print('ious: {}, {}'.format(train_ious[i-1], val_ious[epoch-1]))
             print('des: {}, {}'.format(train_des[i-1], val_des[epoch-1]))
-            print('avg_gen_pred: {} | avg_real_pred: {}\n'.format(a_g_p, a_r_p))
+            # print('avg_gen_pred: {} | avg_real_pred: {}\n'.format(a_g_p, a_r_p))
 
             lossFile.write('Epoch: {} of {}.\n'.format(epoch, nb_steps // steps_per_epoch))
             lossFile.write('D_losses: {}\n'.format(D_losses[i-1]))
@@ -247,10 +249,11 @@ def training_steps_GAN(train_data, train_data_info, val_data, val_data_info, mod
             lossFile.write('val_losses: {}\n'.format(val_losses[epoch-1]))
             lossFile.write('ious: {}, {}\n'.format(train_ious[i-1], val_ious[epoch-1]))
             lossFile.write('des: {}, {}\n'.format(train_des[i-1], val_des[epoch-1]))
-            lossFile.write('avg_gen_pred: {} | avg_real_pred: {}\n\n'.format(a_g_p, a_r_p))
+            # lossFile.write('avg_gen_pred: {} | avg_real_pred: {}\n\n'.format(a_g_p, a_r_p))
 
             # Checkpoint: Save model weights
             model_checkpoint_base_name = output_dir + 'weights\\{}_weights_epoch-{}.h5'
+            # os.path.join(output_dir, 'weights') ????????
             generator_model.save_weights(model_checkpoint_base_name.format('gen', epoch))
             discriminator_model.save_weights(model_checkpoint_base_name.format('discrim', epoch))
 

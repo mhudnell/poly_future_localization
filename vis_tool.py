@@ -182,10 +182,11 @@ def draw_p_and_gt(set_info, prior_bbs, t_p, t_gt, output_dir, unnormalized=True,
 
         heatmap = np.sqrt(heatmap)
         ax.imshow(heatmap, cmap=viridis, alpha=0.75)
-        plt.axis('off')
-        # ax.set_title("sigma_x: {:0.3f}, sigma_y: {:0.3f}, sigma_w: {:0.3f}, sigma_h: {:0.3f}".format(sigma[0], sigma[1], sigma[2], sigma[3]), fontsize=8)
-        plt.tight_layout()
-        # plt.show()
+
+    plt.axis('off')
+    # ax.set_title("sigma_x: {:0.3f}, sigma_y: {:0.3f}, sigma_w: {:0.3f}, sigma_h: {:0.3f}".format(sigma[0], sigma[1], sigma[2], sigma[3]), fontsize=8)
+    plt.tight_layout()
+    # plt.show()
 
 
     if display:
@@ -196,10 +197,10 @@ def draw_p_and_gt(set_info, prior_bbs, t_p, t_gt, output_dir, unnormalized=True,
         # cv2.imwrite(os.path.join(output_dir, seq_name+'_'+set_info[2]+'_'+set_info[3]+'.png'), img)
 
         # matplotlib
-        output_file = os.path.join(output_dir, seq_name+'_'+set_info[2]+'_'+set_info[3])
-        plt.savefig(output_file + '.png', format='png')
+        output_file = os.path.join(output_dir, seq_name+'_'+set_info[2]+'_'+set_info[3]+'_noheat')
+        # plt.savefig(output_file + '.png', format='png')
         # plt.savefig(output_file + '.eps', format='eps', dpi=1000)
-        # plt.savefig(output_file + '.pdf', format='pdf', dpi=1000)
+        plt.savefig(output_file + '.pdf', format='pdf', dpi=1000)
     return
 
 def draw_heatmap(anchor, transforms):

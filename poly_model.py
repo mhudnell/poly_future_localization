@@ -1,13 +1,19 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from tensorflow.contrib import keras
-#from keras import applications
-from tensorflow.python.keras import applications
-from tensorflow.python.keras import backend as K
-from tensorflow.python.keras import layers
-from tensorflow.python.keras import models
-from tensorflow.python.keras import optimizers
-from tensorflow.python.keras import losses
+# from tensorflow.contrib import keras
+import keras
+from keras import applications
+from keras import backend as K
+from keras import layers
+from keras import models
+from keras import optimizers
+from keras import losses
+# from tensorflow.python.keras import applications
+# from tensorflow.python.keras import backend as K
+# from tensorflow.python.keras import layers
+# from tensorflow.python.keras import models
+# from tensorflow.python.keras import optimizers
+# from tensorflow.python.keras import losses
 import tensorflow as tf
 import os
 import re
@@ -84,10 +90,8 @@ def define_poly_network(poly_order, timepoints, past_frames):
     sigma = layers.Lambda(
         lambda x: 
             K.abs(x[...,-1,tf.newaxis] * timepoints[0,:]) +
-	    K.abs(x[...,-2,tf.newaxis]) +
-            kSigmaMin)(
-        coeffs)
-    
+            K.abs(x[...,-2,tf.newaxis]) + kSigmaMin)(coeffs)
+
     output = layers.Lambda(
         lambda x: K.stack(x, axis=-1), name="transforms")([mu, sigma])
 
@@ -103,7 +107,7 @@ def get_model_poly(output_dir, poly_order, timepoints, tau, past_frames, optimiz
 
     if optimizer and optimizer['name']=='adam':
         adam = optimizers.Adam(lr=optimizer['lr'], beta_1=optimizer['beta_1'],
-           beta_2=optimizer['beta_2'], decay=optimizer['decay'], amsgrad=False)
+           beta_2=optimizer['beta_2'], decay=optimizer['decay'])
     else:
         raise Exception('Must specify optimizer.')
 

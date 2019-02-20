@@ -12,7 +12,7 @@ import tensorflow as tf
 import os
 import re
 
-from vis_tool import drawFrameRects, get_IoU, Rect, calc_metrics, calc_metrics_polynomial, calc_metrics_mult
+from vis_tool import drawFrameRects, get_IoU, Rect, calc_metrics, calc_metrics_polynomial, calc_metrics_train
 import data_extract_1obj
 
 
@@ -177,7 +177,7 @@ def train_poly(x_train, x_val, y_train, y_val, train_info, val_info, model_compo
         batch_ious = np.empty((batch_size, 2))
         batch_des = np.empty((batch_size, 2))
         for j in range(batch_size):
-            batch_ious[j], batch_des[j] = calc_metrics_mult(gen_input[j][-4:], gen_target[j], gen_transforms[j])
+            batch_ious[j], batch_des[j] = calc_metrics_train(gen_input[j][-4:], gen_target[j], gen_transforms[j])
 
         avg_iou = np.mean(batch_ious, axis=0)
         avg_de = np.mean(batch_des, axis=0)
@@ -199,7 +199,7 @@ def train_poly(x_train, x_val, y_train, y_val, train_info, val_info, model_compo
             val_batch_ious = np.empty((num_val_samples, 2))
             val_batch_des = np.empty((num_val_samples, 2))
             for j in range(num_val_samples):
-                val_batch_ious[j], val_batch_des[j] = calc_metrics_mult(val_input[j][-4:], val_target[j], gen_transforms[j])
+                val_batch_ious[j], val_batch_des[j] = calc_metrics_train(val_input[j][-4:], val_target[j], gen_transforms[j])
 
             # Print first sample.
             #print(gen_transforms[0, :, 4])

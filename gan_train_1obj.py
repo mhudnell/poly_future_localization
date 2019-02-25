@@ -1,4 +1,3 @@
-#mport gan_1obj
 import numpy as np
 import matplotlib
 # Force matplotlib to not use any Xwindows backend.
@@ -10,10 +9,26 @@ import logging
 import data_extract_1obj
 import poly_model
 
+## Training script parameters ##
 PAST_FRAMES = 10
 POLY_ORDER = 7
 TAU = 1.345
 OFFSET_T = False
+EPOCHS = 1100
+SEED = 11
+OPTIMIZER = {
+	'name': 'adam',
+	'lr': .0005,        # default: .001
+	'beta_1': .9,       # default: .9
+	'beta_2': .999,     # default: .999
+	'decay': 0       # default: 0
+	}
+BATCH_SIZE = 128 #4096 #4096  #7811  #15623 #1024  # 128, 64
+MODEL_NAME = 'lastmin-poly{}_past{}_t{}xsig_seed{}-0_vehicles-nobike_G3-64_{}-lr{}-b1{}-b2{}_bs{}_epochs{}'.format(
+        POLY_ORDER, PAST_FRAMES, TAU, SEED, OPTIMIZER['name'], OPTIMIZER['lr'], OPTIMIZER['beta_1'], OPTIMIZER['beta_2'], BATCH_SIZE, EPOCHS
+        )
+OUTPUT_DIR = os.path.join('/playpen/mhudnell_cvpr_2019/mhudnell/maxgan/models', MODEL_NAME)
+
 
 def log_hyperparams(model_name=None, output_dir=None, train_sets=None, val_sets=None, epochs=None, batch_size=None, k_d=None, k_g=None, optimizer=None, show=None, dataset=None):
     if not os.path.exists(output_dir):
@@ -324,36 +339,17 @@ if __name__ == '__main__':
     k_d = 0  # 1 number of discriminator network updates per adversarial training step
     k_g = 1  # 1 number of generator network updates per adversarial training step
     w_adv = 0.0
-
-
-    optimizer = {
-		'name': 'adam',
-		'lr': .0005,        # default: .001
-		'beta_1': .9,       # default: .9
-		'beta_2': .999,     # default: .999
-		'decay': 0       # default: 0
-		}
-    epochs = 1100
-    batch_size = 128 #4096 #4096  #7811  #15623 #1024  # 128, 64
     starting_step = 0
-    seed = 11
-
-
-    model_name = 'lastmin-poly{}_past{}_t{}xsig_seed{}-0_vehicles-nobike_G3-64_{}-lr{}-b1{}-b2{}_bs{}_epochs{}'.format(
-        POLY_ORDER, PAST_FRAMES, TAU, seed, optimizer['name'], optimizer['lr'], optimizer['beta_1'], optimizer['beta_2'], batch_size, epochs
-        )
-
-    output_dir = os.path.join('/playpen/mhudnell_cvpr_2019/mhudnell/maxgan/models', model_name)
     show = True
 
     # Train Model
-    model_specs = [model_name, starting_step, data_cols,
-                   label_cols, label_dim, optimizer, w_adv,
-                   epochs, batch_size, k_d, k_g,
-                   show, output_dir]
+    model_specs = [MODEL_NAME, starting_step, data_cols,
+                   label_cols, label_dim, OPTIMIZER, w_adv,
+                   EPOCHS, BATCH_SIZE, k_d, k_g,
+                   show, OUTPUT_DIR]
 
     # # Train single model with random 30-8 split (kitti_raw_tracklets dataset)
-    np.random.seed(seed)
+    np.random.seed(SEED)
     all_sets = np.arange(38)
     test_sets = np.random.choice(all_sets, (3,10), replace=False)
     remaining = np.setdiff1d(all_sets, test_sets[0])
@@ -367,4 +363,4 @@ if __name__ == '__main__':
 
     # Train final k-fold model over all training / validation data
     # train_k_fold_joint(6, model_specs)
-    #train_k_fold_joint(7, model_specs, dataset='kitti_raw_tracklets', seed=seed, stopping_epoch=None)
+    #train_k_fold_joint(7, model_specs, dataset='kitti_raw_tracklets', seed=SEED, stopping_epoch=None)

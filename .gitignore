@@ -5,3 +5,6 @@
 
 /models
 *.h5
+/figures
+/test_results
+/cityscape_tracklets

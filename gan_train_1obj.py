@@ -1,4 +1,4 @@
-#import gan_1obj
+#mport gan_1obj
 import numpy as np
 import matplotlib
 # Force matplotlib to not use any Xwindows backend.
@@ -8,9 +8,12 @@ import pickle
 import os
 import logging
 import data_extract_1obj
-import rnn_model
+import poly_model
 
-OUTPUT_DIR = '/playpen/mhudnell_cvpr_2019/jtprice/maxGAN/models'
+PAST_FRAMES = 10
+POLY_ORDER = 7
+TAU = 1.345
+OFFSET_T = False
 
 def log_hyperparams(model_name=None, output_dir=None, train_sets=None, val_sets=None, epochs=None, batch_size=None, k_d=None, k_g=None, optimizer=None, show=None, dataset=None):
     if not os.path.exists(output_dir):
@@ -129,10 +132,7 @@ def train_single(model_specs, train_sets, val_sets, dataset='kitti_tracking'):
      epochs, batch_size, k_d, k_g,
      show, output_dir] = model_specs
 
-    hidden_layer_dim = 64
     timepoints = np.linspace(0.1, 1.0, 10)
-    timepoint_step = 0.1
-    tau = 1.345 # huber threshold is tau * sigma
 
     # Get Data
     if dataset == 'kitti_tracking':
@@ -140,8 +140,8 @@ def train_single(model_specs, train_sets, val_sets, dataset='kitti_tracking'):
         # train_data, train_data_info = data_extract_1obj.get_kitti_data(train_sets)
         # val_data, val_data_info = data_extract_1obj.get_kitti_data(val_sets)
     elif dataset == 'kitti_raw_tracklets':
-        x_train, y_train, train_info = data_extract_1obj.get_kitti_raw_tracklets(timepoints, sets=train_sets, class_types=['Car', 'Van', 'Truck'])
-        x_val, y_val, val_info = data_extract_1obj.get_kitti_raw_tracklets(timepoints, sets=val_sets, class_types=['Car', 'Van', 'Truck'])
+        x_train, y_train, train_info = data_extract_1obj.get_kitti_raw_tracklets(timepoints, sets=train_sets, class_types=['Car', 'Van', 'Truck'], past_frames=PAST_FRAMES, offset_t=OFFSET_T)
+        x_val, y_val, val_info = data_extract_1obj.get_kitti_raw_tracklets(timepoints, sets=val_sets, class_types=['Car', 'Van', 'Truck'], past_frames=PAST_FRAMES, offset_t=OFFSET_T)
         # print(train_data.shape, train_data.shape[0] / (train_data.shape[0] + val_data.shape[0]))
         # print(val_data.shape, val_data.shape[0] / (train_data.shape[0] + val_data.shape[0]))
     else:
@@ -156,9 +156,7 @@ def train_single(model_specs, train_sets, val_sets, dataset='kitti_tracking'):
 
     # Get Model
     
-    M = rnn_model.get_model_rnn(
-        output_dir, hidden_layer_dim, timepoints, timepoint_step ,tau,
-        optimizer=optimizer)
+    M = poly_model.get_model_poly(output_dir, POLY_ORDER, timepoints, TAU, PAST_FRAMES, optimizer=optimizer)
 
     # Train Model
     model_components = [model_name, starting_step, data_cols,
@@ -167,7 +165,7 @@ def train_single(model_specs, train_sets, val_sets, dataset='kitti_tracking'):
                         epochs, batch_size, k_d, k_g,
                         show, output_dir]
     # [G_losses, D_losses, val_losses, train_ious, val_ious, train_des, val_des, avg_gen_pred, avg_real_pred] = gan_1obj.training_steps_GAN(x_train, x_val, y_train, y_val, train_info, val_info, model_components)
-    [M_losses, val_losses, train_ious, val_ious, train_des, val_des] = rnn_model.train_rnn(x_train, x_val, y_train, y_val, train_info, val_info, model_components)
+    [M_losses, val_losses, train_ious, val_ious, train_des, val_des] = poly_model.train_poly(x_train, x_val, y_train, y_val, train_info, val_info, model_components, PAST_FRAMES)
     # Save losses
     save_losses(output_dir, val_losses, val_ious, val_des)
 
@@ -323,32 +321,29 @@ if __name__ == '__main__':
             data_cols.append(char + str(fNum))
     label_cols = []
     label_dim = 0
-    epochs = 600
-    batch_size = 512 #4096 #4096  #7811  #15623 #1024  # 128, 64
-    # steps_per_epoch = num_samples // batch_size  # ~1 epoch (35082 / 32 =~ 1096, 128: 274, 35082: 1)  # interval (in steps) at which to log loss summaries and save plots of image samples to disc
-    # nb_steps = steps_per_epoch*epochs  # 50000 # Add one for logging of the last interval
-    starting_step = 0
-    seed = 11
-
     k_d = 0  # 1 number of discriminator network updates per adversarial training step
     k_g = 1  # 1 number of generator network updates per adversarial training step
     w_adv = 0.0
 
-    optimizer = {
-                'name': 'adam',
-                'lr': .00146,        # default: .001
-                'beta_1': .9,       # default: .9
-                'beta_2': .999,     # default: .999
-                'decay': 0       # default: 0
-                }
-    model_name = 'quartic_sigma-2coeff-abs_red-sum_huber_t1.345xsig_seed-{}-TEST0f_VEHICLES-NOBIKE_7-fold_G3-64_{}-lr{}-b1{}-b2{}_bs{}_epochs{}'.format(
-        seed, optimizer['name'], optimizer['lr'], optimizer['beta_1'], optimizer['beta_2'], batch_size, epochs
-        )
-    # model_name = 'maxGAN_SHOW-D-LEARN_1s-pred_G6-64_D3-32_w-adv{}_{}-lr{}-b1{}-b2{}_bs{}_kd{}_kg{}_epochs{}'.format(
-    #     w_adv, optimizer['name'], optimizer['lr'], optimizer['beta_1'], optimizer['beta_2'], batch_size, k_d, k_g, epochs
-    #     )
 
-    output_dir = os.path.join(OUTPUT_DIR, model_name)
+    optimizer = {
+		'name': 'adam',
+		'lr': .0005,        # default: .001
+		'beta_1': .9,       # default: .9
+		'beta_2': .999,     # default: .999
+		'decay': 0       # default: 0
+		}
+    epochs = 1100
+    batch_size = 128 #4096 #4096  #7811  #15623 #1024  # 128, 64
+    starting_step = 0
+    seed = 11
+
+
+    model_name = 'lastmin-poly{}_past{}_t{}xsig_seed{}-0_vehicles-nobike_G3-64_{}-lr{}-b1{}-b2{}_bs{}_epochs{}'.format(
+        POLY_ORDER, PAST_FRAMES, TAU, seed, optimizer['name'], optimizer['lr'], optimizer['beta_1'], optimizer['beta_2'], batch_size, epochs
+        )
+
+    output_dir = os.path.join('/playpen/mhudnell_cvpr_2019/mhudnell/maxgan/models', model_name)
     show = True
 
     # Train Model
@@ -358,7 +353,7 @@ if __name__ == '__main__':
                    show, output_dir]
 
     # # Train single model with random 30-8 split (kitti_raw_tracklets dataset)
-    np.random.seed(11)
+    np.random.seed(seed)
     all_sets = np.arange(38)
     test_sets = np.random.choice(all_sets, (3,10), replace=False)
     remaining = np.setdiff1d(all_sets, test_sets[0])

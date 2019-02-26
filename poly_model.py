@@ -1,19 +1,19 @@
 import numpy as np
 import matplotlib.pyplot as plt
-# from tensorflow.contrib import keras
-import keras
-from keras import applications
-from keras import backend as K
-from keras import layers
-from keras import models
-from keras import optimizers
-from keras import losses
-# from tensorflow.python.keras import applications
-# from tensorflow.python.keras import backend as K
-# from tensorflow.python.keras import layers
-# from tensorflow.python.keras import models
-# from tensorflow.python.keras import optimizers
-# from tensorflow.python.keras import losses
+#import keras
+#from keras import applications
+#from keras import backend as K
+#from keras import layers
+#from keras import models
+#from keras import optimizers
+#from keras import losses
+from tensorflow.contrib import keras
+from tensorflow.python.keras import applications
+from tensorflow.python.keras import backend as K
+from tensorflow.python.keras import layers
+from tensorflow.python.keras import models
+from tensorflow.python.keras import optimizers
+from tensorflow.python.keras import losses
 import tensorflow as tf
 import os
 import re

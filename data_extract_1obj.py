@@ -176,8 +176,8 @@ def get_kitti_raw_tracklets(timepoints, sets=None, normalize=True, use_occluded=
     print('future_frames:', future_frames)
     print('num_required_frames:', num_required_frames)
 
-    #root = "/data/b/mhudnell_cvpr_2019/2011_09_26_tracklets_only"
-    root = 'F:\\Car data\\kitti\\data_raw_with_tracklets\\2011_09_26'
+    root = "/data/b/mhudnell_cvpr_2019/2011_09_26_tracklets_only"
+    #root = 'F:\\Car data\\kitti\\data_raw_with_tracklets\\2011_09_26'
     for i, seq in enumerate(os.listdir(root)):
         # print(i, seq)
         seq_dir = os.path.join(root, seq)

@@ -5,13 +5,14 @@ from data_extract_1obj import get_kitti_raw_tracklets
 from poly_model import get_model_poly
 
 MODEL_DIR = '/playpen/mhudnell_cvpr_2019/mhudnell/maxgan/models'
-MODEL_NAME = 'lastmin-poly7_past10_t1.345xsig_seed11-0_vehicles-nobike_G3-64_adam-lr0.0005-b10.9-b20.999_bs128_epochs1100'
-EPOCH = '1100'
-POLY_ORDER = 7
+MODEL_NAME = 'redo-lastmin-L2-poly6_past10_t1.345xsig_seed11-0_vehicles-nobike_G3-64_adam-lr0.0005-b10.9-b20.999_bs128_epochs1100'
+EPOCH = '1099'
+POLY_ORDER = 6
 PAST_FRAMES = 10
 TAU = 1.345
 OFFSET_T = False
-OUTPUT_DIR = '/playpen/mhudnell_cvpr_2019/mhudnell/maxgan/lastmin' 
+OUTPUT_DIR = '/playpen/mhudnell_cvpr_2019/mhudnell/maxgan/redo-lastmin' 
+OUTPUT_FILE_NAME = 'L2-p6-10f-1099'
 
 def save_to_npz(M, x, y):
     x = x.reshape((-1, PAST_FRAMES*4))
@@ -27,7 +28,8 @@ def save_to_npz(M, x, y):
 
     np.savez(
          #os.path.join(MODEL_DIR, MODEL_NAME, 'saved_results'),
-         os.path.join(OUTPUT_DIR, 'poly-{}'.format(POLY_ORDER)),
+         #os.path.join(OUTPUT_DIR, 'poly-{}'.format(POLY_ORDER)),
+         os.path.join(OUTPUT_DIR, OUTPUT_FILE_NAME),
          target=y,
          pred=gen_transforms)
 

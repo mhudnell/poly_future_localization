@@ -11,7 +11,7 @@ import poly_model
 
 ## Training script parameters ##
 PAST_FRAMES = 10
-POLY_ORDER = 7
+POLY_ORDER = 6
 TAU = 1.345
 OFFSET_T = False
 EPOCHS = 1100
@@ -24,7 +24,7 @@ OPTIMIZER = {
 	'decay': 0       # default: 0
 	}
 BATCH_SIZE = 128 #4096 #4096  #7811  #15623 #1024  # 128, 64
-MODEL_NAME = 'lastmin-poly{}_past{}_t{}xsig_seed{}-0_vehicles-nobike_G3-64_{}-lr{}-b1{}-b2{}_bs{}_epochs{}'.format(
+MODEL_NAME = 'redo-lastmin-L2-poly{}_past{}_t{}xsig_seed{}-0_vehicles-nobike_G3-64_{}-lr{}-b1{}-b2{}_bs{}_epochs{}'.format(
         POLY_ORDER, PAST_FRAMES, TAU, SEED, OPTIMIZER['name'], OPTIMIZER['lr'], OPTIMIZER['beta_1'], OPTIMIZER['beta_2'], BATCH_SIZE, EPOCHS
         )
 OUTPUT_DIR = os.path.join('/playpen/mhudnell_cvpr_2019/mhudnell/maxgan/models', MODEL_NAME)

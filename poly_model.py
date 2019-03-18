@@ -57,6 +57,25 @@ def huber_generator(k):  # tau, k
 
     return huber
 
+def L1_loss(y_true, y_pred):
+    mu, sigma = y_pred[...,0], y_pred[...,1]
+    mu = tf.reshape(mu, [-1,4,10,1])
+    sigma = tf.reshape(sigma, [-1,4,10,1])
+
+    return tf.abs(y_true - mu) / sigma + tf.log(sigma)
+
+def L2_loss(y_true, y_pred):
+    mu, sigma = y_pred[...,0], y_pred[...,1]
+    mu = tf.reshape(mu, [-1,4,10,1])
+    sigma = tf.reshape(sigma, [-1,4,10,1])
+
+    squared_diff = tf.square(y_true - mu)
+    loss = 0.5 * squared_diff / tf.square(sigma)
+    confidence_penalty = tf.log(sigma)
+
+    return tf.reduce_sum(tf.add(loss, confidence_penalty))
+
+
 # poly_order: highest degree on x in the polynomial (e.g., t^2 + t => 2)
 # timepoints: list of future timepoints (offset from current) at which to
 #   produce outputs
@@ -111,7 +130,9 @@ def get_model_poly(output_dir, poly_order, timepoints, tau, past_frames, optimiz
     else:
         raise Exception('Must specify optimizer.')
 
-    M.compile(optimizer=adam, loss={'transforms': huber_generator(tau)})
+    # M.compile(optimizer=adam, loss={'transforms': huber_generator(tau)})
+    M.compile(optimizer=adam, loss={'transforms': L1_loss})
+    # M.compile(optimizer=adam, loss={'transforms': L2_loss})
     print(M.summary())
 
     # Add model outputs to return values

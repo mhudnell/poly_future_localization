@@ -12,24 +12,25 @@ PAST_FRAMES = 10
 TAU = 1.345
 OFFSET_T = False
 OUTPUT_DIR = '/playpen/mhudnell_cvpr_2019/mhudnell/maxgan/redo-lastmin' 
-OUTPUT_FILE_NAME = 'L2-p6-10f-1099'
+OUTPUT_FILE_NAME = 'L2-1099'
 
 def save_to_npz(M, x, y):
-    x = x.reshape((-1, PAST_FRAMES*4))
+    x_in = x.reshape((-1, PAST_FRAMES*4))
     y = y.reshape((-1, 4, 10, 1))
     num_samples = x.shape[0]
-    out = M.predict(x)
+    out = M.predict(x_in)
     gen_transforms = out[0]
 
     ious = np.empty((num_samples, 10))
     des = np.empty((num_samples, 10))
     for i in range(x.shape[0]):
-        ious[i], des[i] = calc_metrics_all(x[i][-4:], y[i], gen_transforms[i], offset_t=OFFSET_T)
+        ious[i], des[i] = calc_metrics_all(x_in[i][-4:], y[i], gen_transforms[i], offset_t=OFFSET_T)
 
     np.savez(
          #os.path.join(MODEL_DIR, MODEL_NAME, 'saved_results'),
          #os.path.join(OUTPUT_DIR, 'poly-{}'.format(POLY_ORDER)),
          os.path.join(OUTPUT_DIR, OUTPUT_FILE_NAME),
+         x=x,
          target=y,
          pred=gen_transforms)
 

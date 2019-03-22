@@ -353,7 +353,7 @@ def calc_metrics_train(anchor, target_transforms, generated_transforms, sample_s
 
     return ious, des
 
-def calc_metrics_all(anchor, target_transforms, generated_transforms, sample_set=None, offset_t=False):
+def calc_metrics_all(anchor, target_transforms, generated_transforms, sample_set=None, offset_t=False, normalized=True):
     """ Calculates displacement error and IoU metrics for 0.5 and 1.0 sec predictions"""
     ious = np.empty(10)
     des = np.empty(10)
@@ -364,8 +364,10 @@ def calc_metrics_all(anchor, target_transforms, generated_transforms, sample_set
         else:        
             t_bb = data_extract_1obj.transform(anchor, target_transforms[:, i, 0])
             g_bb = data_extract_1obj.transform(anchor, generated_transforms[:, i, 0])
-        t_bb = data_extract_1obj.unnormalize_bb(t_bb, sample_set=sample_set)
-        g_bb = data_extract_1obj.unnormalize_bb(g_bb, sample_set=sample_set)
+
+        if normalized:
+            t_bb = data_extract_1obj.unnormalize_bb(t_bb, sample_set=sample_set)
+            g_bb = data_extract_1obj.unnormalize_bb(g_bb, sample_set=sample_set)
 
         target = Rect.make_cXcYWH(t_bb[0], t_bb[1], t_bb[2], t_bb[3])
         generated = Rect.make_cXcYWH(g_bb[0], g_bb[1], g_bb[2], g_bb[3])
